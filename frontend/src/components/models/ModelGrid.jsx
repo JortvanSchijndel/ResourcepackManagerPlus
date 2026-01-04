@@ -1,0 +1,177 @@
+import React, { useState, useEffect } from 'react';
+import { ModelCard } from './ModelCard';
+import { ModelDetailModal } from '../modals/ModelDetailModal';
+import { api } from '../../services/api';
+import { useAuth } from '../../hooks/useAuth';
+
+export const ModelGrid = ({
+                            models,
+                            modelPreviews,
+                            onEdit,
+                            onDownload,
+                            onCopyMove,
+                            onDelete,
+                            onPreviewClick,
+                            branch
+                          }) => {
+  const [selectedModel, setSelectedModel] = useState(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [allTags, setAllTags] = useState([]);
+  const { isAdmin } = useAuth();
+
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const res = await api.getTags();
+        if (res?.tags) {
+          setAllTags(res.tags);
+        }
+      } catch (e) {
+        console.error("Failed to fetch tags", e);
+      }
+    };
+    fetchTags();
+  }, []);
+
+  const handleModelClick = (model) => {
+    setSelectedModel(model);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleEditFromDetail = (model) => {
+    setIsDetailModalOpen(false);
+    onEdit(model);
+  };
+
+  if (models.length === 0) {
+    return (
+        <div className="bg-card rounded-xl p-6 border border-card transition-colors">
+          <div className="text-center py-16 text-muted">
+            <div className="text-5xl mb-4">📦</div>
+            <div className="text-lg mb-2 text-secondary">No models found</div>
+            <div className="text-sm text-tertiary">Upload your first model to get started</div>
+          </div>
+        </div>
+    );
+  }
+
+  // Separate models into review and approved
+  const reviewModels = models.filter(m => m.status === 'review');
+  const approvedModels = models.filter(m => m.status !== 'review');
+
+  // Group models by category (namespace)
+  const groupModels = (modelsToGroup) => {
+    return modelsToGroup.reduce((acc, model) => {
+      const key = model.namespace;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(model);
+      return acc;
+    }, {});
+  };
+
+  const groupedApprovedModels = groupModels(approvedModels);
+
+  return (
+      <>
+        {/* Review Section (Only visible if there are models in review) */}
+        {reviewModels.length > 0 && (
+          <div className="mb-12 border-b border-border pb-8">
+            <div className="text-lg font-bold text-warning mb-6 flex items-center gap-2">
+              ⚠️ Models for Review
+              <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-medium bg-warning-soft-hover text-warning border border-warning/30">
+                {reviewModels.length}
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {reviewModels.map((model) => {
+                  const previewData = modelPreviews[`${model.namespace}-${model.model_identifier}`];
+                  return (
+                      <ModelCard
+                          key={`${model.namespace}-${model.model_identifier}`}
+                          model={model}
+                          preview={previewData?.bbmodel}
+                          minecraft_model={previewData?.minecraft_model}
+                          onEdit={() => onEdit(model)}
+                          onDownload={() => onDownload(model)}
+                          onCopyMove={() => onCopyMove(model)}
+                          onDelete={() => onDelete(model)}
+                          onPreviewClick={() => onPreviewClick(previewData?.bbmodel)}
+                          onModelClick={() => handleModelClick(model)}
+                          branch={branch}
+                          allTags={allTags}
+                          isAdmin={isAdmin}
+                          isReview={true}
+                      />
+                  );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Approved Models */}
+        {Object.entries(groupedApprovedModels).map(([group, groupModels]) => (
+            <div key={group} className="mb-8">
+              <div className="text-sm font-semibold text-secondary uppercase tracking-wide mb-4 flex items-center gap-2">
+                📁 {group}
+                <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-medium bg-secondary text-secondary-foreground border border-default transition-colors">
+              {groupModels.length}
+            </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {groupModels.map((model) => {
+                    const previewData = modelPreviews[`${model.namespace}-${model.model_identifier}`];
+                    return (
+                        <ModelCard
+                            key={`${model.namespace}-${model.model_identifier}`}
+                            model={model}
+                            preview={previewData?.bbmodel}
+                            minecraft_model={previewData?.minecraft_model}
+                            onEdit={() => onEdit(model)}
+                            onDownload={() => onDownload(model)}
+                            onCopyMove={() => onCopyMove(model)}
+                            onDelete={() => onDelete(model)}
+                            onPreviewClick={() => onPreviewClick(previewData?.bbmodel)}
+                            onModelClick={() => handleModelClick(model)}
+                            branch={branch}
+                            allTags={allTags}
+                            isAdmin={isAdmin}
+                        />
+                    );
+                })}
+              </div>
+            </div>
+        ))}
+
+        {/* Detail Modal */}
+        {selectedModel && (
+            <ModelDetailModal
+                model={selectedModel}
+                preview={
+                  modelPreviews[
+                      `${selectedModel.namespace}-${selectedModel.model_identifier}`
+                      ]?.bbmodel
+                }
+                minecraft_model={
+                  modelPreviews[
+                      `${selectedModel.namespace}-${selectedModel.model_identifier}`
+                      ]?.minecraft_model
+                }
+                isOpen={isDetailModalOpen}
+                onClose={() => {
+                  setIsDetailModalOpen(false);
+                  setSelectedModel(null);
+                }}
+                branch={branch}
+                onEdit={handleEditFromDetail}
+                onDownload={onDownload}
+                onCopyMove={onCopyMove}
+                onDelete={onDelete}
+                isAdmin={isAdmin}
+            />
+        )}
+
+      </>
+  );
+};

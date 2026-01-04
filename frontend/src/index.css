@@ -1,0 +1,207 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "@radix-ui/themes/styles.css";
+
+/* Base theme variables */
+:root {
+  /* Light Mode - Clean White/Grey with Pink Accent */
+  --background: #ffffff;
+  --foreground: #09090b;
+
+  --card: #ffffff;
+  --card-border: #e4e4e7;
+
+  --popover: #ffffff;
+  --popover-border: #e4e4e7;
+  --separator: #e4e4e7;
+
+  /* Pink Accent */
+  --primary: #c993d8; /* Pink 500 */
+  --primary-hover: #c78ada; /* Pink 600 */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f4f4f5;
+  --secondary-hover: #e4e4e7;
+  --secondary-foreground: #18181b;
+
+  --success: #22c55e;
+  --success-hover: #16a34a;
+  --success-foreground: #ffffff;
+
+  --warning: #f59e0b;
+  --warning-hover: #d97706;
+  --warning-foreground: #ffffff;
+
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-foreground: #ffffff;
+
+  --muted: #f4f4f5;
+  --muted-hover: #e4e4e7;
+  --muted-foreground: #71717a;
+
+  --accent: #f4f4f5;
+  --accent-hover: #e4e4e7;
+  --accent-foreground: #18181b;
+
+  --destructive: #ef4444;
+  --destructive-hover: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --border: #e4e4e7;
+  --border-hover: #d4d4d8;
+  --input: #e4e4e7;
+  --ring: #d59ab5;
+
+  --canvas-bg: #f4f4f5;
+  --preview-bg: #ffffff;
+
+  /* Code block colors - Light mode */
+  --code-bg: #f4f4f5;
+  --code-text: #09090b;
+
+  /* Text */
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-tertiary: #71717a;
+  --text-muted: #a1a1aa;
+
+  /* Misc */
+  --modal-backdrop: rgba(0, 0, 0, 0.5);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+
+  --toast-success-border: #22c55e;
+  --toast-error-border: #ef4444;
+
+  --hover: #f4f4f5;
+}
+
+.dark {
+  /* Dark Mode - Deep Grey/Black with Teal Accent */
+  --background: #09090b; /* Zinc 950 */
+  --foreground: #fafafa; /* Zinc 50 */
+
+  --card: #18181b; /* Zinc 900 */
+  --card-border: #27272a; /* Zinc 800 */
+
+  --popover: #18181b;
+  --popover-border: #27272a;
+  --separator: #27272a;
+
+  /* Teal Accent */
+  --primary: #14b8a6; /* Teal 500 */
+  --primary-hover: #0d9488; /* Teal 600 */
+  --primary-foreground: #ffffff;
+
+  --secondary: #27272a;
+  --secondary-hover: #3f3f46;
+  --secondary-foreground: #fafafa;
+
+  --success: #22c55e;
+  --success-hover: #16a34a;
+  --success-foreground: #ffffff;
+
+  --warning: #f59e0b;
+  --warning-hover: #d97706;
+  --warning-foreground: #ffffff;
+
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-foreground: #ffffff;
+
+  --muted: #27272a;
+  --muted-hover: #3f3f46;
+  --muted-foreground: #a1a1aa;
+
+  --accent: #27272a;
+  --accent-hover: #3f3f46;
+  --accent-foreground: #fafafa;
+
+  --destructive: #ef4444;
+  --destructive-hover: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --border: #27272a;
+  --border-hover: #3f3f46;
+  --input: #27272a;
+  --ring: #14b8a6;
+
+  --canvas-bg: #000000;
+  --preview-bg: #18181b;
+
+  /* Code block colors - Dark mode */
+  --code-bg: #1e1e1e; /* VS Code Dark */
+  --code-text: #d4d4d4;
+
+  /* Text */
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-muted: #52525b;
+
+  --hover: #27272a;
+}
+
+/* Utility classes using CSS variables */
+.bg-background {
+  background-color: var(--background);
+}
+
+.bg-card {
+  background-color: var(--card);
+}
+
+.bg-popover {
+  background-color: var(--popover);
+}
+
+.border-popover-border {
+  border-color: var(--popover-border);
+}
+
+.bg-canvas {
+  background-color: var(--canvas-bg);
+}
+
+.bg-preview {
+  background-color: var(--preview-bg);
+}
+
+.text-foreground {
+  color: var(--foreground);
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.border-default {
+  border-color: var(--border);
+}
+
+.border-card {
+  border-color: var(--card-border);
+}
+
+input::file-selector-button{
+  border: thin solid var(--input);
+  background: var(--input);
+  color: var(--foreground);
+}
+
+input::file-selector-button:hover{
+  background-color: var(--hover);
+  border: thin solid var(--hover);
+}

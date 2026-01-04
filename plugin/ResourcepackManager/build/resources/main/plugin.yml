@@ -1,0 +1,30 @@
+name: ResourcepackManager
+version: '1.0-SNAPSHOT'
+main: org.jortvanschijndel.resourcepackManager.ResourcepackManager
+api-version: '1.21'
+commands:
+  rp-reload:
+    description: Reloads the plugin's configuration.
+    permission: resourcepackmanager.reload
+  rp-status:
+    description: Checks the status of the plugin.
+    permission: resourcepackmanager.status
+  rp-seturl:
+    description: Sets the allowed URL in the configuration.
+    permission: resourcepackmanager.seturl
+  rp-debug:
+    description: Toggles debug mode.
+    permission: resourcepackmanager.debug
+permissions:
+  resourcepackmanager.reload:
+    description: Allows reloading the plugin's configuration.
+    default: op
+  resourcepackmanager.status:
+    description: Allows checking the plugin's status.
+    default: op
+  resourcepackmanager.seturl:
+    description: Allows setting the allowed URL.
+    default: op
+  resourcepackmanager.debug:
+    description: Allows toggling debug mode.
+    default: op

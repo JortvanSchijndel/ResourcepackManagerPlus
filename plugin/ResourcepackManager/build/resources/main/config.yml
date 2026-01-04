@@ -1,0 +1,11 @@
+# The API key for authenticating requests from the Resourcepack Manager.
+api-key: "your-secret-api-key"
+
+# The port for the embedded HTTP server.
+port: 8080
+
+# The public IP address of the Minecraft server.
+server-ip: "127.0.0.1"
+
+# The only URL from which the plugin will accept resource packs.
+allowed-url: ""

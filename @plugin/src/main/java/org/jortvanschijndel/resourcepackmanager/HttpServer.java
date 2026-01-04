@@ -1,0 +1,62 @@
+package org.jortvanschijndel.resourcepackmanager;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.util.concurrent.Executors;
+
+public class HttpServer {
+
+    private final ResourcepackManager plugin;
+    private com.sun.net.httpserver.HttpServer server;
+
+    public HttpServer(ResourcepackManager plugin) {
+        this.plugin = plugin;
+    }
+
+    public void start() throws IOException {
+        int port = plugin.getConfig().getInt("port", 8080);
+        server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(port), 0);
+
+        server.createContext("/heartbeat", new HeartbeatHandler(plugin));
+        server.createContext("/upload", new UploadHandler(plugin));
+        server.createContext("/pack.zip", new DownloadHandler(plugin));
+
+        server.setExecutor(Executors.newSingleThreadExecutor());
+        server.start();
+    }
+
+    public void stop() {
+        if (server != null) {
+            server.stop(0);
+        }
+    }
+
+    static class HeartbeatHandler implements HttpHandler {
+        private final ResourcepackManager plugin;
+
+        public HeartbeatHandler(ResourcepackManager plugin) {
+            this.plugin = plugin;
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (plugin.isDebugEnabled()) {
+                plugin.getLogger().info("[Debug] Received heartbeat request from " + exchange.getRemoteAddress());
+            }
+
+            if (!"GET".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1); // Method Not Allowed
+                return;
+            }
+            String response = "{\"status\":\"alive\"}";
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length());
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response.getBytes());
+            }
+        }
+    }
+}
