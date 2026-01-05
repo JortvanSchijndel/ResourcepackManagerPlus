@@ -473,13 +473,21 @@ def calculate_file_hash(file_path):
     return sha256_hash.hexdigest()
 
 
-def create_item_definition(item_def_path, model_path):
+def create_item_definition(item_def_path, model_path, has_tints=False):
     item_def = {
         "model": {
             "type": "minecraft:model",
             "model": model_path
         }
     }
+
+    if has_tints:
+        item_def["model"]["tints"] = [
+            {
+                "type": "minecraft:dye",
+                "default": -6265536
+            }
+        ]
 
     with open(item_def_path, 'w') as f:
         json.dump(item_def, f, indent=2)
@@ -710,9 +718,19 @@ def upload_model(branch_name):
             with open(model_json_path, 'w') as f:
                 json.dump(model_data, f, indent=2)
 
+        model_json_path = models_dir / f"{model_identifier}.json"
+        has_tints = False
+        if model_json_path.exists():
+            try:
+                with open(model_json_path, 'r') as f:
+                    if '"tintindex":' in f.read():
+                        has_tints = True
+            except Exception as e:
+                logging.error(f"Error checking for tints: {e}")
+
         item_def_path = items_dir / f"{model_identifier}.json"
         model_path = f"{namespace}:item/{model_identifier}/{model_identifier}"
-        create_item_definition(item_def_path, model_path)
+        create_item_definition(item_def_path, model_path, has_tints)
 
         existing_metadata = {}
         metadata_path = models_dir / "metadata.json"
