@@ -1452,6 +1452,11 @@ def list_files_in_branch():
             file_path = Path(root) / filename
             rel_path = file_path.relative_to(branch_path)
             files.append(str(rel_path).replace('\\', '/'))
+        
+        for dirname in dirs:
+            dir_path = Path(root) / dirname
+            rel_path = dir_path.relative_to(branch_path)
+            files.append(str(rel_path).replace('\\', '/') + "/")
 
     return jsonify({"files": sorted(files)})
 

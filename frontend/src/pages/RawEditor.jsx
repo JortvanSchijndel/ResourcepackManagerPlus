@@ -271,13 +271,17 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
     const buildFileTree = (paths) => {
         const root = [];
         paths.forEach(path => {
-            const parts = path.split('/');
+            const isExplicitFolder = path.endsWith('/');
+            const cleanPath = isExplicitFolder ? path.slice(0, -1) : path;
+            const parts = cleanPath.split('/');
             let currentLevel = root;
             let currentPath = '';
 
             parts.forEach((part, index) => {
+                if (!part) return;
+                
                 currentPath = currentPath ? `${currentPath}/${part}` : part;
-                const isFolder = index < parts.length - 1;
+                const isFolder = index < parts.length - 1 || (isExplicitFolder && index === parts.length - 1);
 
                 let existingNode = currentLevel.find(node => node.name === part);
 
@@ -294,6 +298,9 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                     }
                 } else {
                     if (isFolder) {
+                        if (!existingNode.isFolder) {
+                            existingNode.isFolder = true;
+                        }
                         currentLevel = existingNode.children;
                     }
                 }
