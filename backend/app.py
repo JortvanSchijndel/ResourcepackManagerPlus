@@ -645,7 +645,6 @@ def upload_model(branch_name):
         return jsonify({"error": "All fields required"}), 400
 
     namespace = namespace.replace(" ", "_").lower()
-    model_name = model_name.replace(" ", "_").lower()
     model_identifier = model_identifier.replace(" ", "_").lower()
 
     branch_path = _get_branch_path(branch_name)
@@ -659,7 +658,7 @@ def upload_model(branch_name):
 
     try:
         if bbmodel_file:
-            bbmodel_path = models_dir / f"{model_name}.bbmodel"
+            bbmodel_path = models_dir / f"{model_identifier}.bbmodel"
             bbmodel_file.save(bbmodel_path)
 
             with open(bbmodel_path, 'r') as f:
@@ -686,7 +685,7 @@ def upload_model(branch_name):
                                     json.dump(mcmeta_content, f, indent=2)
 
         if json_file:
-            model_json_path = models_dir / f"{model_name}.json"
+            model_json_path = models_dir / f"{model_identifier}.json"
             json_file.save(model_json_path)
 
             with open(model_json_path, 'r') as f:
@@ -699,18 +698,20 @@ def upload_model(branch_name):
                         if len(parts) == 2:
                             tex_namespace, tex_path = parts
                             if not tex_path.startswith("item/"):
-                                model_data["textures"][key] = f"{tex_namespace}:item/{model_identifier}/{tex_path}"
+                                clean_path = tex_path.replace('\\', '/').split('/')[-1]
+                                model_data["textures"][key] = f"{tex_namespace}:item/{model_identifier}/{clean_path}"
                             else:
                                 model_data["textures"][key] = f"{tex_namespace}:{tex_path}"
                     elif isinstance(value, str):
                         if not value.startswith("item/"):
-                            model_data["textures"][key] = f"{namespace}:item/{model_identifier}/{value}"
+                            clean_value = value.replace('\\', '/').split('/')[-1]
+                            model_data["textures"][key] = f"{namespace}:item/{model_identifier}/{clean_value}"
 
             with open(model_json_path, 'w') as f:
                 json.dump(model_data, f, indent=2)
 
         item_def_path = items_dir / f"{model_identifier}.json"
-        model_path = f"{namespace}:item/{model_identifier}/{model_name}"
+        model_path = f"{namespace}:item/{model_identifier}/{model_identifier}"
         create_item_definition(item_def_path, model_path)
 
         existing_metadata = {}
@@ -769,7 +770,6 @@ def update_model(branch_name, namespace, model_identifier):
         return jsonify({"error": "All fields required"}), 400
 
     new_namespace = new_namespace.replace(" ", "_").lower()
-    new_model_name = new_model_name.replace(" ", "_").lower()
     new_model_identifier = new_model_identifier.replace(" ", "_").lower()
 
     branch_path = _get_branch_path(branch_name)
@@ -813,11 +813,11 @@ def update_model(branch_name, namespace, model_identifier):
         has_new_bbmodel = 'bbmodel' in request.files and request.files['bbmodel'].filename
 
         for json_file in existing_jsons:
-            if json_file.stem != new_model_name:
+            if json_file.stem != new_model_identifier:
                 if has_new_json:
                     json_file.unlink()
                 else:
-                    new_path = target_models_dir / f"{new_model_name}.json"
+                    new_path = target_models_dir / f"{new_model_identifier}.json"
                     json_file.rename(new_path)
 
                     if new_namespace != namespace or new_model_identifier != model_identifier:
@@ -842,11 +842,11 @@ def update_model(branch_name, namespace, model_identifier):
                             logging.error(f"Error updating texture paths: {e}")
 
         for bb_file in existing_bbmodels:
-            if bb_file.stem != new_model_name:
+            if bb_file.stem != new_model_identifier:
                 if has_new_bbmodel:
                     bb_file.unlink()
                 else:
-                    bb_file.rename(target_models_dir / f"{new_model_name}.bbmodel")
+                    bb_file.rename(target_models_dir / f"{new_model_identifier}.bbmodel")
 
     return upload_model(branch_name)
 
@@ -1022,12 +1022,11 @@ def download_bbmodel(branch_name, namespace, model_identifier):
     if not bbmodel_files:
         return jsonify({"error": "BBModel file not found"}), 404
 
-    # noinspection PyArgumentList
     return send_file(
         bbmodel_files[0],
         as_attachment=True,
-        attachment_filename=f"{model_identifier}.bbmodel",
-        cache_timeout=0
+        download_name=f"{model_identifier}.bbmodel",
+        max_age=0
     )
 
 
@@ -1101,8 +1100,12 @@ def download_pack(branch_name):
                     if not is_excluded:
                         zipf.write(file_path, rel_path)
 
-    # noinspection PyArgumentList
-    return send_file(zip_path, as_attachment=True, attachment_filename=f"ingeniamc_resourcepack_{branch_name}.zip", cache_timeout=0)
+    return send_file(
+        zip_path,
+        as_attachment=True,
+        download_name=f"ingeniamc_resourcepack_{branch_name}.zip",
+        max_age=0
+    )
 
 
 @app.route('/api/compare', methods=['POST'])
