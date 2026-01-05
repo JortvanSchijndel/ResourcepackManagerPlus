@@ -589,6 +589,7 @@ export const UploadModal = ({
   const [bbmodelFile, setBbmodelFile] = useState(null);
   const [jsonFile, setJsonFile] = useState(null);
   const [modelIdentifier, setModelIdentifier] = useState('');
+  const [isIdentifierTouched, setIsIdentifierTouched] = useState(false);
   const [uploadPreview, setUploadPreview] = useState(null);
   const [bbmodelData, setBbmodelData] = useState(null);
   const [localCategories, setLocalCategories] = useState(categories);
@@ -607,6 +608,7 @@ export const UploadModal = ({
       setBbmodelFile(null);
       setJsonFile(null);
       setModelIdentifier('');
+      setIsIdentifierTouched(false);
       setUploadPreview(null);
       setBbmodelData(null);
       setOpenDropdown(null);
@@ -617,11 +619,11 @@ export const UploadModal = ({
 
   // Auto-generate model identifier from model name
   useEffect(() => {
-    if (uploadModelName && !modelIdentifier) {
+    if (uploadModelName && !isIdentifierTouched) {
       const cleaned = uploadModelName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
       setModelIdentifier(cleaned);
     }
-  }, [uploadModelName]);
+  }, [uploadModelName, isIdentifierTouched]);
 
   // Check for duplicate identifier
   useEffect(() => {
@@ -839,7 +841,10 @@ export const UploadModal = ({
                   </Description>
                   <Input
                       value={modelIdentifier}
-                      onChange={(e) => setModelIdentifier(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                      onChange={(e) => {
+                        setModelIdentifier(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+                        setIsIdentifierTouched(true);
+                      }}
                       placeholder="cool_sword"
                       className={`w-full placeholder-background-inverse bg-accent hover:bg-(--accent-hover) ${identifierError ? 'border-red-500' : ''}`}
                       autoComplete="off"
