@@ -581,7 +581,7 @@ export const EditModal = ({ show, model, categories, onClose, onSave, loading })
     if (model) {
       setEditCategory(model.namespace);
       setEditName(model.name);
-      setEditIdentifier(model.identifier);
+      setEditIdentifier(model.identifier || model.model_identifier || '');
       setEditTags(model.tags ? model.tags.map(t => typeof t === 'string' ? t : t.id) : []);
       setBbmodelFile(null);
       setJsonFile(null);
@@ -655,7 +655,7 @@ export const EditModal = ({ show, model, categories, onClose, onSave, loading })
                   </Label>
                   <Input
                       value={editName}
-                      onChange={(e) => setEditName(e.targe.value)}
+                      onChange={(e) => setEditName(e.target.value)}
                       placeholder="Enter name..."
                       className="w-full placeholder-background-inverse bg-accent hover:bg-(--accent-hover)"
                   />
