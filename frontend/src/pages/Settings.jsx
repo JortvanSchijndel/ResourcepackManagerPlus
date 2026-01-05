@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { Button, Input, Label, Dropdown, Modal, TextField } from '@heroui/react';
-import { Trash2, Plus, ArrowLeft, Key, User, Server, RefreshCw } from 'lucide-react';
+import { Button, Input, Label, Dropdown, Modal, TextField, Switch } from '@heroui/react';
+import { Trash2, Plus, ArrowLeft, Key, User, Server, RefreshCw, Sun, Moon } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/constants';
@@ -16,7 +16,7 @@ const fetchWithCreds = (url, options = {}) => {
 const Settings = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDark, setIsDark } = useAuth();
   const { showMessage } = useToast();
   const navigate = useNavigate();
 
@@ -302,248 +302,276 @@ const Settings = () => {
   };
 
   return (
-      <div className="p-6 space-y-8 max-w-6xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="ghost" size="icon" onPress={() => navigate('/')}>
-            <ArrowLeft className="h-6 w-6" />
-          </Button>
-          <h1 className="text-3xl font-bold">Settings</h1>
-        </div>
-
-        {/* Profile Settings */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold flex items-center gap-2">
-            <User className="h-6 w-6" /> Profile Settings
-          </h2>
-          <div className="bg-card border border-card rounded-lg p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Username: {user?.username}</p>
-                <p className="text-sm text-muted">Role: {user?.role}</p>
-              </div>
-              <Button onPress={() => setChangePasswordOpen(true)}>
-                <Key className="mr-2 h-4 w-4" /> Change Password / Username
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Tag Management (Visible to all) */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold">Tag Management</h2>
-          <div className="bg-card border border-card rounded-lg p-6 space-y-6">
-            <form onSubmit={handleCreateTag} className="flex gap-4 items-end">
-              <TextField className="flex-1">
-                <Label>Tag Name</Label>
-                <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} required />
-              </TextField>
-              <TextField className="w-32">
-                <Label>Color</Label>
-                <Input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="h-10 p-1" />
-              </TextField>
-              <TextField className="flex-1">
-                <Label>Group (Optional)</Label>
-                <Input value={newTagGroup} onChange={(e) => setNewTagGroup(e.target.value)} />
-              </TextField>
-              <Button type="submit">Add Tag</Button>
-            </form>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tags.map((tag, index) => {
-                const tagId = typeof tag === 'object' ? tag.id : tag;
-                const tagName = typeof tag === 'object' ? tag.tag : tag;
-                const tagColor = typeof tag === 'object' ? tag.color : '#808080';
-
-                return (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-background">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: tagColor }}></div>
-                        <span>{tagName}</span>
-                      </div>
-                      <Button size="sm" variant="ghost" color="danger" onPress={() => handleDeleteTag(tagId)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Server Management */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-semibold flex items-center gap-2">
-              <Server className="h-6 w-6" /> Server Management
-            </h2>
-            <Button variant="outline" size="sm" onPress={checkHeartbeats} disabled={heartbeatLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${heartbeatLoading ? 'animate-spin' : ''}`} />
-              Refresh Status
+      <div className={isDark ? 'dark' : ''}>
+        <div className="min-h-screen text-foreground transition-colors p-6 space-y-8 max-w-6xl mx-auto">
+          <div className="flex items-center gap-4 mb-6">
+            <Button variant="ghost" size="icon" onPress={() => navigate('/')}>
+              <ArrowLeft className="h-6 w-6" />
             </Button>
+            <h1 className="text-3xl font-bold">Settings</h1>
           </div>
-          <div className="bg-card border border-card rounded-lg p-6 space-y-6">
-            {isAdmin && (
-              <form onSubmit={handleAddServer} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <TextField className="md:col-span-1">
-                  <Label>Server Name</Label>
-                  <Input value={newServerName} onChange={(e) => setNewServerName(e.target.value)} required />
-                </TextField>
-                <TextField className="md:col-span-1">
-                  <Label>Server URL</Label>
-                  <Input value={newServerUrl} onChange={(e) => setNewServerUrl(e.target.value)} required placeholder="http://ip:port" />
-                </TextField>
-                <TextField className="md:col-span-1">
-                  <Label>API Key</Label>
-                  <Input value={newServerApiKey} onChange={(e) => setNewServerApiKey(e.target.value)} required />
-                </TextField>
-                <Button type="submit" className="self-end h-10">Add Server</Button>
-              </form>
-            )}
 
-            <div className="space-y-4">
-              {servers.map(server => (
-                <div key={server.id} className="flex items-center justify-between p-3 border rounded-lg bg-(--secondary)">
-                  <div>
-                    <p className="font-medium">{server.name}</p>
-                    <p className="text-sm text-(--text-secondary)">{server.url}</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <StatusIndicator connected={server.connected} />
-                    {isAdmin && (
-                      <Button size="sm" variant="ghost" color="danger" onPress={() => handleDeleteServer(server.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+          {/* Appearance Settings */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold flex items-center gap-2">
+              {isDark ? <Moon className="h-6 w-6" /> : <Sun className="h-6 w-6" />} Appearance
+            </h2>
+            <div className="bg-card border border-card rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Dark Mode</p>
+                  <p className="text-sm text-muted">Toggle between light and dark theme</p>
                 </div>
-              ))}
+                <Switch isSelected={isDark} onChange={setIsDark}>
+                  <Switch.Control className={isDark ? "bg-(--primary)" : "bg-gray-300"}>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* User Management (Admin Only) */}
-        {isAdmin && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-semibold">User Management</h2>
-                <Button onPress={() => setNewUserOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Add User
+          {/* Profile Settings */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold flex items-center gap-2">
+              <User className="h-6 w-6" /> Profile Settings
+            </h2>
+            <div className="bg-card border border-card rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Username: {user?.username}</p>
+                  <p className="text-sm text-muted">Role: {user?.role}</p>
+                </div>
+                <Button onPress={() => setChangePasswordOpen(true)}>
+                  <Key className="mr-2 h-4 w-4" /> Change Password / Username
                 </Button>
               </div>
+            </div>
+          </div>
 
-              <div className="border border-card rounded-lg overflow-x-auto">
-                <table className="w-full text-sm bg-(--card)">
-                  <thead className="bg-(--secondary)">
-                  <tr>
-                    <th className="p-4 text-left font-semibold">Username</th>
-                    <th className="p-4 text-left font-semibold">Role</th>
-                    <th className="p-4 text-right font-semibold">Actions</th>
-                  </tr>
-                  </thead>
-                  <tbody>
-                  {users.map((u) => (
-                      <tr key={u.id} className="border-b border-card">
-                        <td className="p-4 font-medium">{u.username}</td>
-                        <td className="p-4">
-                          <Dropdown>
-                            <Dropdown.Trigger asChild>
-                              <Button className="w-32 justify-between" isDisabled={u.id === user?.id}>
-                                {u.role}
-                              </Button>
-                            </Dropdown.Trigger>
-                            <Dropdown.Popover>
-                              <Dropdown.Menu onAction={(key) => handleUpdateRole(u.id, key)}>
-                                <Dropdown.Item id="normal">Normal</Dropdown.Item>
-                                <Dropdown.Item id="admin">Admin</Dropdown.Item>
-                              </Dropdown.Menu>
-                            </Dropdown.Popover>
-                          </Dropdown>
-                        </td>
-                        <td className="p-4 text-right">
-                          <Button variant="ghost" size="icon" onPress={() => handleDeleteUser(u.id)} isDisabled={u.id === user?.id}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </td>
-                      </tr>
-                  ))}
-                  </tbody>
-                </table>
+          {/* Tag Management (Visible to all) */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold">Tag Management</h2>
+            <div className="bg-card border border-card rounded-lg p-6 space-y-6">
+              <form onSubmit={handleCreateTag} className="flex gap-4 items-end">
+                <TextField className="flex-1">
+                  <Label>Tag Name</Label>
+                  <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} required />
+                </TextField>
+                <TextField className="w-32">
+                  <Label>Color</Label>
+                  <Input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="h-10 p-1" />
+                </TextField>
+                <TextField className="flex-1">
+                  <Label>Group (Optional)</Label>
+                  <Input value={newTagGroup} onChange={(e) => setNewTagGroup(e.target.value)} />
+                </TextField>
+                <Button type="submit">Add Tag</Button>
+              </form>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {tags.map((tag, index) => {
+                  const tagId = typeof tag === 'object' ? tag.id : tag;
+                  const tagName = typeof tag === 'object' ? tag.tag : tag;
+                  const tagColor = typeof tag === 'object' ? tag.color : '#808080';
+
+                  return (
+                      <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: tagColor }}></div>
+                          <span>{tagName}</span>
+                        </div>
+                        <Button size="sm" variant="ghost" color="danger" onPress={() => handleDeleteTag(tagId)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                  );
+                })}
               </div>
             </div>
-        )}
+          </div>
 
-        {/* Modals */}
-        <Modal isOpen={newUserOpen} onOpenChange={setNewUserOpen}>
-          <Modal.Backdrop>
-            <Modal.Container>
-              <Modal.Dialog>
-                <Modal.CloseTrigger />
-                <Modal.Header>
-                  <Modal.Heading>Create New User</Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <form onSubmit={handleCreateUser} className="space-y-4">
-                    <TextField>
-                      <Label>Username</Label>
-                      <Input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required />
-                    </TextField>
-                    <TextField>
-                      <Label>Password</Label>
-                      <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
-                    </TextField>
-                    <div className="space-y-2">
-                      <Label>Role</Label>
-                      <Dropdown>
-                        <Dropdown.Trigger asChild>
-                          <Button className="w-full justify-between">
-                            {newRole}
-                          </Button>
-                        </Dropdown.Trigger>
-                        <Dropdown.Popover>
-                          <Dropdown.Menu onAction={setNewRole}>
-                            <Dropdown.Item id="normal">Normal</Dropdown.Item>
-                            <Dropdown.Item id="admin">Admin</Dropdown.Item>
-                          </Dropdown.Menu>
-                        </Dropdown.Popover>
-                      </Dropdown>
+          {/* Server Management */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-semibold flex items-center gap-2">
+                <Server className="h-6 w-6" /> Server Management
+              </h2>
+              <Button variant="outline" size="sm" onPress={checkHeartbeats} disabled={heartbeatLoading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${heartbeatLoading ? 'animate-spin' : ''}`} />
+                Refresh Status
+              </Button>
+            </div>
+            <div className="bg-card border border-card rounded-lg p-6 space-y-6">
+              {isAdmin && (
+                <form onSubmit={handleAddServer} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                  <TextField className="md:col-span-1">
+                    <Label>Server Name</Label>
+                    <Input value={newServerName} onChange={(e) => setNewServerName(e.target.value)} required />
+                  </TextField>
+                  <TextField className="md:col-span-1">
+                    <Label>Server URL</Label>
+                    <Input value={newServerUrl} onChange={(e) => setNewServerUrl(e.target.value)} required placeholder="http://ip:port" />
+                  </TextField>
+                  <TextField className="md:col-span-1">
+                    <Label>API Key</Label>
+                    <Input value={newServerApiKey} onChange={(e) => setNewServerApiKey(e.target.value)} required />
+                  </TextField>
+                  <Button type="submit" className="self-end h-10">Add Server</Button>
+                </form>
+              )}
+
+              <div className="space-y-4">
+                {servers.map(server => (
+                  <div key={server.id} className="flex items-center justify-between p-3 border rounded-lg bg-(--secondary)">
+                    <div>
+                      <p className="font-medium">{server.name}</p>
+                      <p className="text-sm text-(--text-secondary)">{server.url}</p>
                     </div>
-                    <Button type="submit" className="w-full">Create User</Button>
-                  </form>
-                </Modal.Body>
-              </Modal.Dialog>
-            </Modal.Container>
-          </Modal.Backdrop>
-        </Modal>
+                    <div className="flex items-center gap-4">
+                      <StatusIndicator connected={server.connected} />
+                      {isAdmin && (
+                        <Button size="sm" variant="ghost" color="danger" onPress={() => handleDeleteServer(server.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-        <Modal isOpen={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
-          <Modal.Backdrop>
-            <Modal.Container>
-              <Modal.Dialog>
-                <Modal.CloseTrigger />
-                <Modal.Header>
-                  <Modal.Heading>Update Profile</Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <form onSubmit={handleUpdateProfile} className="space-y-4">
-                    <TextField>
-                      <Label>Username</Label>
-                      <Input value={newSelfUsername} onChange={(e) => setNewSelfUsername(e.target.value)} required />
-                    </TextField>
-                    <TextField>
-                      <Label>Current Password (Required)</Label>
-                      <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
-                    </TextField>
-                    <TextField>
-                      <Label>New Password (Optional)</Label>
-                      <Input type="password" value={newSelfPassword} onChange={(e) => setNewSelfPassword(e.g.value)} placeholder="Leave blank to keep current" />
-                    </TextField>
-                    <Button type="submit" className="w-full">Update Profile</Button>
-                  </form>
-                </Modal.Body>
-              </Modal.Dialog>
-            </Modal.Container>
-          </Modal.Backdrop>
-        </Modal>
+          {/* User Management (Admin Only) */}
+          {isAdmin && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-semibold">User Management</h2>
+                  <Button onPress={() => setNewUserOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" /> Add User
+                  </Button>
+                </div>
+
+                <div className="border border-card rounded-lg overflow-x-auto">
+                  <table className="w-full text-sm bg-(--card)">
+                    <thead className="bg-(--secondary)">
+                    <tr>
+                      <th className="p-4 text-left font-semibold">Username</th>
+                      <th className="p-4 text-left font-semibold">Role</th>
+                      <th className="p-4 text-right font-semibold">Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {users.map((u) => (
+                        <tr key={u.id} className="border-b border-card">
+                          <td className="p-4 font-medium">{u.username}</td>
+                          <td className="p-4">
+                            <Dropdown>
+                              <Dropdown.Trigger asChild>
+                                <Button className="w-32 justify-between" isDisabled={u.id === user?.id}>
+                                  {u.role}
+                                </Button>
+                              </Dropdown.Trigger>
+                              <Dropdown.Popover>
+                                <Dropdown.Menu onAction={(key) => handleUpdateRole(u.id, key)}>
+                                  <Dropdown.Item id="normal">Normal</Dropdown.Item>
+                                  <Dropdown.Item id="admin">Admin</Dropdown.Item>
+                                </Dropdown.Menu>
+                              </Dropdown.Popover>
+                            </Dropdown>
+                          </td>
+                          <td className="p-4 text-right">
+                            <Button variant="ghost" size="icon" onPress={() => handleDeleteUser(u.id)} isDisabled={u.id === user?.id}>
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </td>
+                        </tr>
+                    ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+          )}
+
+          {/* Modals */}
+          <Modal isOpen={newUserOpen} onOpenChange={setNewUserOpen}>
+            <Modal.Backdrop>
+              <Modal.Container>
+                <Modal.Dialog>
+                  <Modal.CloseTrigger />
+                  <Modal.Header>
+                    <Modal.Heading>Create New User</Modal.Heading>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <form onSubmit={handleCreateUser} className="space-y-4">
+                      <TextField>
+                        <Label>Username</Label>
+                        <Input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required />
+                      </TextField>
+                      <TextField>
+                        <Label>Password</Label>
+                        <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                      </TextField>
+                      <div className="space-y-2">
+                        <Label>Role</Label>
+                        <Dropdown>
+                          <Dropdown.Trigger asChild>
+                            <Button className="w-full justify-between">
+                              {newRole}
+                            </Button>
+                          </Dropdown.Trigger>
+                          <Dropdown.Popover>
+                            <Dropdown.Menu onAction={setNewRole}>
+                              <Dropdown.Item id="normal">Normal</Dropdown.Item>
+                              <Dropdown.Item id="admin">Admin</Dropdown.Item>
+                            </Dropdown.Menu>
+                          </Dropdown.Popover>
+                        </Dropdown>
+                      </div>
+                      <Button type="submit" className="w-full">Create User</Button>
+                    </form>
+                  </Modal.Body>
+                </Modal.Dialog>
+              </Modal.Container>
+            </Modal.Backdrop>
+          </Modal>
+
+          <Modal isOpen={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+            <Modal.Backdrop>
+              <Modal.Container>
+                <Modal.Dialog className="bg-(--card)">
+                  <Modal.CloseTrigger />
+                  <Modal.Header>
+                    <Modal.Heading>Update Profile</Modal.Heading>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <form onSubmit={handleUpdateProfile} className="space-y-4">
+                      <TextField>
+                        <Label>New Username</Label>
+                        <Input className="bg-(--secondary)" value={newSelfUsername} onChange={(e) => setNewSelfUsername(e.target.value)} required />
+                      </TextField>
+                      <TextField>
+                        <Label>Current Password <span className="text-red-500">*</span></Label>
+                        <Input className="bg-(--secondary)" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                      </TextField>
+                      <TextField>
+                        <Label>New Password</Label>
+                        <Input 
+                          type="password" 
+                          value={newSelfPassword} 
+                          onChange={(e) => setNewSelfPassword(e.target.value)} 
+                          placeholder="Leave blank to keep current" 
+                          className="placeholder:text-(--text-secondary) bg-(--secondary)"
+                        />
+                      </TextField>
+                      <Button type="submit" className="w-full">Update Profile</Button>
+                    </form>
+                  </Modal.Body>
+                </Modal.Dialog>
+              </Modal.Container>
+            </Modal.Backdrop>
+          </Modal>
+        </div>
       </div>
   );
 };

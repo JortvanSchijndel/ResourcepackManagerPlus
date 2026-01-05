@@ -205,3 +205,13 @@ input::file-selector-button:hover{
   background-color: var(--hover);
   border: thin solid var(--hover);
 }
+
+/* Placeholder color override */
+input::placeholder {
+  color: var(--text-secondary);
+  opacity: 1; /* Firefox */
+}
+
+::-ms-input-placeholder { /* Edge 12 -18 */
+  color: var(--text-secondary);
+}

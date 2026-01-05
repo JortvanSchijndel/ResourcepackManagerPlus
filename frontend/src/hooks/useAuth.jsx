@@ -6,10 +6,26 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isDark, setIsDark] = useState(() => {
+    // Check cookie for theme preference
+    const match = document.cookie.match(new RegExp('(^| )theme=([^;]+)'));
+    if (match) return match[2] === 'dark';
+    return true; // Default to dark
+  });
 
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    // Update cookie and DOM when theme changes
+    document.cookie = `theme=${isDark ? 'dark' : 'light'}; path=/; max-age=31536000`; // 1 year
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDark]);
 
   const checkAuth = async () => {
     try {
@@ -69,7 +85,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin: user?.role === 'admin', isDark, setIsDark }}>
       {!loading && children}
     </AuthContext.Provider>
   );

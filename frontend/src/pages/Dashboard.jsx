@@ -18,9 +18,8 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
 export const Dashboard = () => {
-  const [isDark, setIsDark] = useState(true);
   const { message, showMessage } = useToast();
-  const { logout } = useAuth();
+  const { logout, isDark, setIsDark } = useAuth();
   const navigate = useNavigate();
   
   const {
@@ -175,14 +174,6 @@ export const Dashboard = () => {
   });
 
   const uniqueCategories = [...new Set(models.map((m) => m.namespace))].sort();
-
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDark]);
 
   if (showRawEditor) {
     return (
