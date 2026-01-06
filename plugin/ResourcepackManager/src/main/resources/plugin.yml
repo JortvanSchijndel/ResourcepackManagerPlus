@@ -3,19 +3,18 @@ version: '1.0-SNAPSHOT'
 main: org.jortvanschijndel.resourcepackManager.ResourcepackManager
 api-version: '1.21'
 commands:
-  rp-reload:
-    description: Reloads the plugin's configuration.
-    permission: resourcepackmanager.reload
-  rp-status:
-    description: Checks the status of the plugin.
-    permission: resourcepackmanager.status
-  rp-seturl:
-    description: Sets the allowed URL in the configuration.
-    permission: resourcepackmanager.seturl
-  rp-debug:
-    description: Toggles debug mode.
-    permission: resourcepackmanager.debug
+  rmp:
+    description: Main command for ResourcepackManager
+    aliases: [resourcepackmanagerplus]
+    permission: resourcepackmanager.use
+  give-model:
+    description: Give a custom model item
+    usage: /give-model <item> <category> <model>
+    permission: resourcepackmanager.give-model
 permissions:
+  resourcepackmanager.use:
+    description: Allows using the main command.
+    default: op
   resourcepackmanager.reload:
     description: Allows reloading the plugin's configuration.
     default: op
@@ -27,4 +26,7 @@ permissions:
     default: op
   resourcepackmanager.debug:
     description: Allows toggling debug mode.
+    default: op
+  resourcepackmanager.give-model:
+    description: Allows giving custom model items.
     default: op

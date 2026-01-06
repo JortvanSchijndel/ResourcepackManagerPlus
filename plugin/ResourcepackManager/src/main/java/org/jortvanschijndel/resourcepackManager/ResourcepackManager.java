@@ -14,6 +14,7 @@ public final class ResourcepackManager extends JavaPlugin {
     private HttpServer httpServer;
     private File activePack;
     private boolean debugEnabled;
+    private ResourcePackInspector packInspector;
 
     @Override
     public void onEnable() {
@@ -28,6 +29,7 @@ public final class ResourcepackManager extends JavaPlugin {
         httpServer.start();
 
         // Load active pack
+        packInspector = new ResourcePackInspector();
         loadActivePack();
 
         // Register listener
@@ -35,21 +37,17 @@ public final class ResourcepackManager extends JavaPlugin {
 
         // Register commands
         CommandManager commandManager = new CommandManager(this);
-        PluginCommand reloadCommand = getCommand("rp-reload");
-        if (reloadCommand != null) {
-            reloadCommand.setExecutor(commandManager);
+        
+        PluginCommand rmpCommand = getCommand("rmp");
+        if (rmpCommand != null) {
+            rmpCommand.setExecutor(commandManager);
+            rmpCommand.setTabCompleter(commandManager);
         }
-        PluginCommand statusCommand = getCommand("rp-status");
-        if (statusCommand != null) {
-            statusCommand.setExecutor(commandManager);
-        }
-        PluginCommand setUrlCommand = getCommand("rp-seturl");
-        if (setUrlCommand != null) {
-            setUrlCommand.setExecutor(commandManager);
-        }
-        PluginCommand debugCommand = getCommand("rp-debug");
-        if (debugCommand != null) {
-            debugCommand.setExecutor(commandManager);
+
+        PluginCommand giveModelCommand = getCommand("give-model");
+        if (giveModelCommand != null) {
+            giveModelCommand.setExecutor(commandManager);
+            giveModelCommand.setTabCompleter(commandManager);
         }
     }
 
@@ -77,6 +75,9 @@ public final class ResourcepackManager extends JavaPlugin {
 
     public void setActivePack(File activePack) {
         this.activePack = activePack;
+        if (activePack != null) {
+            packInspector.inspect(activePack);
+        }
     }
 
     public boolean isDebugEnabled() {
@@ -88,6 +89,10 @@ public final class ResourcepackManager extends JavaPlugin {
         getConfig().set("debug", debugEnabled);
         saveConfig();
     }
+    
+    public ResourcePackInspector getPackInspector() {
+        return packInspector;
+    }
 
     private void loadActivePack() {
         File packsFolder = new File(getDataFolder(), "packs");
@@ -97,6 +102,7 @@ public final class ResourcepackManager extends JavaPlugin {
                 Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed());
                 activePack = files[0];
                 getLogger().info("Loaded active resource pack: " + activePack.getName());
+                packInspector.inspect(activePack);
             }
         }
     }
