@@ -5,8 +5,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.Comparator;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class ResourcepackManager extends JavaPlugin {
 
@@ -15,6 +15,7 @@ public final class ResourcepackManager extends JavaPlugin {
     private File activePack;
     private boolean debugEnabled;
     private ResourcePackInspector packInspector;
+    private final Map<String, UUID> tokenMap = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -111,5 +112,17 @@ public final class ResourcepackManager extends JavaPlugin {
                 packInspector.inspect(activePack);
             }
         }
+    }
+
+    public String generateToken(UUID playerUuid) {
+        String token = UUID.randomUUID().toString();
+        tokenMap.put(token, playerUuid);
+        // Expire token after 5 minutes
+        getServer().getScheduler().runTaskLater(this, () -> tokenMap.remove(token), 20L * 60 * 5);
+        return token;
+    }
+
+    public boolean validateToken(String token) {
+        return tokenMap.containsKey(token);
     }
 }

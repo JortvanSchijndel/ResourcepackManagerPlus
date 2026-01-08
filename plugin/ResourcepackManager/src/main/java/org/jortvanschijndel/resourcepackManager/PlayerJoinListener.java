@@ -37,7 +37,9 @@ public class PlayerJoinListener implements Listener {
             }
             String serverIp = plugin.getConfig().getString("server-ip");
             int port = plugin.getConfig().getInt("port");
-            String url = "http://" + serverIp + ":" + port + "/pack.zip";
+            
+            String token = plugin.generateToken(player.getUniqueId());
+            String url = "http://" + serverIp + ":" + port + "/pack.zip?token=" + token;
 
             try {
                 String hash = calculateSHA1(activePack);
