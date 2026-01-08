@@ -247,7 +247,7 @@ def create_resource_pack_zip(branch_name):
 
     zip_path = TEMP_DIR / f"resourcepack_{branch_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
 
-    files_to_zip = [p for p in branch_path.rglob('*') if p.is_file() and '.bbmodel' not in p.name]
+    files_to_zip = [p for p in branch_path.rglob('*') if p.is_file() and '.bbmodel' not in p.name and p.name != 'metadata.json']
     if not files_to_zip:
         return None
 
@@ -1104,7 +1104,7 @@ def download_pack(branch_name):
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(branch_path):
             for file in files:
-                if not file.endswith('.bbmodel'):
+                if not file.endswith('.bbmodel') and file != 'metadata.json':
                     file_path = Path(root) / file
                     rel_path = file_path.relative_to(branch_path)
                     rel_path_str = str(rel_path).replace('\\', '/')
