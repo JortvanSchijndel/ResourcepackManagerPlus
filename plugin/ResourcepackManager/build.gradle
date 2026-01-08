@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id("xyz.jpenilla.run-paper") version "2.3.1"
+    id "com.github.johnrengelman.shadow" version "8.1.1"
 }
 
 group = 'org.jortvanschijndel'
@@ -12,6 +13,8 @@ repositories {
         name = "papermc-repo"
         url = "https://repo.papermc.io/repository/maven-public/"
     }
+    maven { url 'https://jitpack.io' }
+    maven { url "https://repo.xenondevs.xyz/releases" }
 }
 
 dependencies {
@@ -52,4 +55,7 @@ processResources {
     filesMatching('plugin.yml') {
         expand props
     }
+}
+
+shadowJar {
 }

@@ -49,6 +49,12 @@ public final class ResourcepackManager extends JavaPlugin {
             giveModelCommand.setExecutor(commandManager);
             giveModelCommand.setTabCompleter(commandManager);
         }
+
+        PluginCommand modelsCommand = getCommand("models");
+        if (modelsCommand != null) {
+            modelsCommand.setExecutor(commandManager);
+            modelsCommand.setTabCompleter(commandManager);
+        }
     }
 
     @Override

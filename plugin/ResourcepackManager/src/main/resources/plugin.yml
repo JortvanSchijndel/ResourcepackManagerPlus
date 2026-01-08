@@ -11,6 +11,10 @@ commands:
     description: Give a custom model item
     usage: /give-model <item> <category> <model>
     permission: resourcepackmanager.give-model
+  models:
+    description: Open the model viewer GUI
+    usage: /models [search]
+    permission: resourcepackmanager.model-viewer
 permissions:
   resourcepackmanager.use:
     description: Allows using the main command.
@@ -29,4 +33,7 @@ permissions:
     default: op
   resourcepackmanager.give-model:
     description: Allows giving custom model items.
+    default: op
+  resourcepackmanager.model-viewer:
+    description: Allows opening the model viewer.
     default: op
