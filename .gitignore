@@ -1,1 +1,37 @@
+/backend/branches/
+/backend/servers.yaml
 backend/users.yaml
+backend/config.yaml
+/backend/temp/
+/.idea/
+
+
+# Logs
+/frontend/logs
+*.log
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/pnpm-debug.log*
+/frontend/lerna-debug.log*
+
+/frontend/node_modules
+/frontend/dist
+/frontend/dist-ssr
+/frontend/*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+/plugin/ResourcepackManager/.gradle/
+/plugin/ResourcepackManager/.idea/
+/plugin/ResourcepackManager/build/
