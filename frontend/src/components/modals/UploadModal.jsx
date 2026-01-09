@@ -1,5 +1,5 @@
 import React, { useState, useRef, Suspense, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '../models/OrbitControls';
 import { Modal, Button, TextField, Label, Input, Description } from '@heroui/react';
 import { Plus, Trash2, Upload, ChevronRight } from 'lucide-react';
@@ -7,6 +7,21 @@ import { api } from '../../services/api';
 import { MinecraftModel } from '../models/MinecraftModel';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useAuth } from '../../hooks/useAuth';
+
+const SceneCapture = ({ onRegister }) => {
+  const { gl, scene, camera } = useThree();
+
+  useEffect(() => {
+    if (onRegister) {
+      onRegister(() => {
+        gl.render(scene, camera);
+        return gl.domElement.toDataURL('image/png');
+      });
+    }
+  }, [gl, scene, camera, onRegister]);
+
+  return null;
+};
 
 const AddTagModal = ({ show, onClose, onAdd }) => {
   const [tagName, setTagName] = useState('');
@@ -596,6 +611,7 @@ export const UploadModal = ({
   const [openDropdown, setOpenDropdown] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
   const [identifierError, setIdentifierError] = useState('');
+  const captureThumbnailRef = useRef(null);
 
   useEffect(() => {
     setLocalCategories(categories);
@@ -674,7 +690,7 @@ export const UploadModal = ({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!bbmodelFile || !jsonFile || !uploadCategory || !uploadModelName || !modelIdentifier) {
       alert('Please fill all required fields and upload both files');
       return;
@@ -692,6 +708,17 @@ export const UploadModal = ({
     formData.append('modelName', uploadModelName);
     formData.append('modelIdentifier', modelIdentifier);
     formData.append('tags', JSON.stringify(selectedTags));
+
+    if (captureThumbnailRef.current) {
+        try {
+            const dataUrl = captureThumbnailRef.current();
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+            formData.append('thumbnail', blob, 'thumbnail.png');
+        } catch (e) {
+            console.error("Thumbnail capture failed", e);
+        }
+    }
 
     onUpload(formData);
   };
@@ -788,13 +815,14 @@ export const UploadModal = ({
                         className="w-full h-40 lg:h-60 bg-canvas rounded-lg border border-card transition-colors"
                         onContextMenu={(e) => e.preventDefault()}
                     >
-                      <Canvas camera={{ position: [2, 2, 2], fov: 65 }}>
+                      <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ position: [2, 2, 2], fov: 65 }}>
                         <Suspense fallback={null}>
                           <ambientLight intensity={0.6} />
                           <directionalLight position={[5, 5, 5]} intensity={0.8} />
                           <pointLight position={[-5, -5, -5]} intensity={0.3} />
                           <MinecraftModel modelData={uploadPreview} bbModelData={bbmodelData} />
                           <OrbitControls enableZoom={true} enablePan={true} />
+                          <SceneCapture onRegister={(fn) => (captureThumbnailRef.current = fn)} />
                         </Suspense>
                       </Canvas>
                     </div>

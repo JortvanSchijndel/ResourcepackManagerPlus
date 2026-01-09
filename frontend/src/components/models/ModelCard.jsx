@@ -12,7 +12,10 @@ export const ModelCard = ({
                             branch,
                             allTags,
                             isAdmin,
-                            isReview
+                            isReview,
+                            onMouseEnter,
+                            onMouseLeave,
+                            isHovered
                           }) => {
   const [tags, setTags] = useState([]);
 
@@ -35,18 +38,23 @@ export const ModelCard = ({
       <div
           className={`bg-card rounded-lg border overflow-hidden transition-all hover:shadow-lg cursor-pointer ${isReview ? 'border-warning' : 'border-card hover:border-border-hover'}`}
           onClick={onModelClick}
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
       >
-        <ModelPreview 
-          bbmodel={preview} 
-          minecraft_model={minecraft_model}
-          branch={branch}
-          namespace={model.namespace}
-          modelIdentifier={model.model_identifier}
-          onClick={(e) => {
-            e.stopPropagation();
-            onPreviewClick();
-          }} 
-        />
+        <div className="model-preview-container relative">
+            <ModelPreview 
+              bbmodel={preview} 
+              minecraft_model={minecraft_model}
+              branch={branch}
+              namespace={model.namespace}
+              modelIdentifier={model.model_identifier}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreviewClick();
+              }} 
+              isHovered={isHovered}
+            />
+        </div>
 
         <div className="p-4">
           <div className="flex justify-between items-start mb-1">

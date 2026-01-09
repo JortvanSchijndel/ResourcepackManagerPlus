@@ -4,7 +4,7 @@ import { OrbitControls as OrbitControlsImpl } from 'three/examples/jsm/controls/
 
 extend({ OrbitControls: OrbitControlsImpl });
 
-export const OrbitControls = (props) => {
+export const OrbitControls = ({ domElement, ...props }) => {
   const { camera, gl } = useThree();
   const controls = useRef();
 
@@ -13,7 +13,7 @@ export const OrbitControls = (props) => {
   return (
     <orbitControls
       ref={controls}
-      args={[camera, gl.domElement]}
+      args={[camera, domElement || gl.domElement]}
       {...props}
     />
   );

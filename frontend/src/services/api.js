@@ -250,5 +250,10 @@ export const api = {
       body: formData,
     });
     return response.json();
+  },
+
+  // Thumbnails
+  getThumbnail: (branch, namespace, modelIdentifier) => {
+    return `${API_URL}/thumbnail/${branch}/${namespace}/${modelIdentifier}.png`;
   }
 };

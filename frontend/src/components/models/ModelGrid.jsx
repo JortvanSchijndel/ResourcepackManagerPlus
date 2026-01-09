@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { ModelCard } from './ModelCard';
 import { ModelDetailModal } from '../modals/ModelDetailModal';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
+import { Canvas } from '@react-three/fiber';
+import { MinecraftModel } from './MinecraftModel';
+import { OrbitControls } from './OrbitControls';
+import * as THREE from 'three';
+import { createPortal } from 'react-dom';
 
 export const ModelGrid = ({
                             models,
@@ -18,6 +23,10 @@ export const ModelGrid = ({
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [allTags, setAllTags] = useState([]);
   const { isAdmin } = useAuth();
+  
+  // Shared Canvas State
+  const [hoveredModel, setHoveredModel] = useState(null);
+  const [canvasTarget, setCanvasTarget] = useState(null);
 
   useEffect(() => {
     const fetchTags = async () => {
@@ -41,6 +50,17 @@ export const ModelGrid = ({
   const handleEditFromDetail = (model) => {
     setIsDetailModalOpen(false);
     onEdit(model);
+  };
+
+  // Handle mouse enter/leave for cards to manage the shared canvas
+  const handleCardMouseEnter = (modelId, targetElement) => {
+    setHoveredModel(modelId);
+    setCanvasTarget(targetElement);
+  };
+
+  const handleCardMouseLeave = () => {
+    setHoveredModel(null);
+    setCanvasTarget(null);
   };
 
   if (models.length === 0) {
@@ -71,8 +91,45 @@ export const ModelGrid = ({
 
   const groupedApprovedModels = groupModels(approvedModels);
 
+  // Find the currently hovered model data
+  const currentHoveredModel = models.find(m => `${m.namespace}-${m.model_identifier}` === hoveredModel);
+  const currentHoveredPreview = currentHoveredModel ? modelPreviews[`${currentHoveredModel.namespace}-${currentHoveredModel.model_identifier}`] : null;
+  const currentHoveredModelData = currentHoveredPreview?.minecraft_model || currentHoveredPreview?.bbmodel;
+
   return (
       <>
+        {/* Shared Canvas Portal */}
+        {canvasTarget && currentHoveredModelData && createPortal(
+            <div 
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'auto',
+                    zIndex: 10
+                }}
+            >
+                <Canvas camera={{ position: [2, 2, 2], fov: 65 }}>
+                    <Suspense fallback={null}>
+                        <ambientLight intensity={0.6} />
+                        <directionalLight position={[5, 5, 5]} intensity={0.8} />
+                        <pointLight position={[-5, -5, -5]} intensity={0.3} />
+                        <MinecraftModel 
+                            modelData={currentHoveredModelData}
+                            bbModelData={currentHoveredPreview?.bbmodel}
+                            branch={branch}
+                            namespace={currentHoveredModel.namespace}
+                            modelIdentifier={currentHoveredModel.model_identifier}
+                        />
+                        <OrbitControls enableZoom={true} enablePan={true} />
+                    </Suspense>
+                </Canvas>
+            </div>,
+            canvasTarget
+        )}
+
         {/* Review Section (Only visible if there are models in review) */}
         {reviewModels.length > 0 && (
           <div className="mb-12 border-b border-border pb-8">
@@ -85,10 +142,11 @@ export const ModelGrid = ({
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {reviewModels.map((model) => {
-                  const previewData = modelPreviews[`${model.namespace}-${model.model_identifier}`];
+                  const modelId = `${model.namespace}-${model.model_identifier}`;
+                  const previewData = modelPreviews[modelId];
                   return (
                       <ModelCard
-                          key={`${model.namespace}-${model.model_identifier}`}
+                          key={modelId}
                           model={model}
                           preview={previewData?.bbmodel}
                           minecraft_model={previewData?.minecraft_model}
@@ -102,6 +160,9 @@ export const ModelGrid = ({
                           allTags={allTags}
                           isAdmin={isAdmin}
                           isReview={true}
+                          onMouseEnter={(e) => handleCardMouseEnter(modelId, e.currentTarget.querySelector('.model-preview-container'))}
+                          onMouseLeave={handleCardMouseLeave}
+                          isHovered={hoveredModel === modelId}
                       />
                   );
               })}
@@ -121,10 +182,11 @@ export const ModelGrid = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 {groupModels.map((model) => {
-                    const previewData = modelPreviews[`${model.namespace}-${model.model_identifier}`];
+                    const modelId = `${model.namespace}-${model.model_identifier}`;
+                    const previewData = modelPreviews[modelId];
                     return (
                         <ModelCard
-                            key={`${model.namespace}-${model.model_identifier}`}
+                            key={modelId}
                             model={model}
                             preview={previewData?.bbmodel}
                             minecraft_model={previewData?.minecraft_model}
@@ -137,6 +199,9 @@ export const ModelGrid = ({
                             branch={branch}
                             allTags={allTags}
                             isAdmin={isAdmin}
+                            onMouseEnter={(e) => handleCardMouseEnter(modelId, e.currentTarget.querySelector('.model-preview-container'))}
+                            onMouseLeave={handleCardMouseLeave}
+                            isHovered={hoveredModel === modelId}
                         />
                     );
                 })}

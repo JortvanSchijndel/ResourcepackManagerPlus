@@ -15,6 +15,7 @@ import difflib
 import requests
 import uuid
 import logging
+import io
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_change_this_in_production'
@@ -637,6 +638,7 @@ def list_models(branch_name):
 def upload_model(branch_name):
     bbmodel_file = request.files.get('bbmodel')
     json_file = request.files.get('json')
+    thumbnail_file = request.files.get('thumbnail')
 
     namespace = request.form.get('namespace')
     model_name = request.form.get('modelName')
@@ -718,6 +720,12 @@ def upload_model(branch_name):
             with open(model_json_path, 'w') as f:
                 json.dump(model_data, f, indent=2)
 
+        # Process thumbnail (save to metadata as base64)
+        thumbnail_base64 = None
+        if thumbnail_file:
+            thumbnail_data = thumbnail_file.read()
+            thumbnail_base64 = f"data:image/png;base64,{base64.b64encode(thumbnail_data).decode('utf-8')}"
+
         model_json_path = models_dir / f"{model_identifier}.json"
         has_tints = False
         if model_json_path.exists():
@@ -760,7 +768,8 @@ def upload_model(branch_name):
             "author": existing_metadata.get("author", current_user.username),
             "last_editor": current_user.username,
             "version": version,
-            "comments": existing_metadata.get("comments", [])
+            "comments": existing_metadata.get("comments", []),
+            "thumbnail": thumbnail_base64 or existing_metadata.get("thumbnail")
         }
 
         with open(metadata_path, 'w') as f:
@@ -1433,6 +1442,31 @@ def get_texture(branch_name, namespace, model_identifier, texture_path):
         return jsonify({"error": "Texture not found"}), 404
 
     return send_file(file_path)
+
+
+@app.route('/api/thumbnail/<branch_name>/<namespace>/<model_identifier>.png', methods=['GET'])
+@login_required
+def get_thumbnail(branch_name, namespace, model_identifier):
+    branch_path = _get_branch_path(branch_name)
+    
+    # Check metadata.json for base64 thumbnail
+    models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
+    metadata_path = models_dir / "metadata.json"
+    
+    if metadata_path.exists():
+        try:
+            with open(metadata_path, 'r') as f:
+                meta = json.load(f)
+                if meta.get("thumbnail"):
+                    # data:image/png;base64,....
+                    parts = meta["thumbnail"].split(",", 1)
+                    if len(parts) == 2:
+                        data = base64.b64decode(parts[1])
+                        return send_file(io.BytesIO(data), mimetype='image/png')
+        except Exception as e:
+            logging.error(f"Error reading thumbnail from metadata: {e}")
+        
+    return jsonify({"error": "Thumbnail not found"}), 404
 
 
 @app.route('/api/files', methods=['GET'])

@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import * as THREE from 'three';
+import { API_URL } from '../../config/constants';
 
 export const MinecraftModel = ({ modelData, bbModelData, branch, namespace, modelIdentifier }) => {
   const [textureMap, setTextureMap] = useState({});
@@ -50,7 +51,7 @@ export const MinecraftModel = ({ modelData, bbModelData, branch, namespace, mode
             } 
             // Fallback to API if branch info is available (Model Card / Detail)
             else if (branch && namespace && modelIdentifier) {
-                const url = `http://localhost:5000/api/texture/${branch}/${namespace}/${modelIdentifier}/${filename}.png`;
+                const url = `${API_URL}/texture/${branch}/${namespace}/${modelIdentifier}/${filename}.png`;
                 try {
                     const texture = await loader.loadAsync(url);
                     texture.magFilter = THREE.NearestFilter;
