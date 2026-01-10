@@ -31,6 +31,7 @@ backend/config.yaml
 *.sln
 *.sw?
 
+*.env
 
 /plugin/ResourcepackManager/.gradle/
 /plugin/ResourcepackManager/.idea/
