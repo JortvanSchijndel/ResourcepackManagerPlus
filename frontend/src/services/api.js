@@ -255,5 +255,24 @@ export const api = {
   // Thumbnails
   getThumbnail: (branch, namespace, modelIdentifier) => {
     return `${API_URL}/thumbnail/${branch}/${namespace}/${modelIdentifier}.png`;
+  },
+
+  // Audit
+  auditModels: async (branch) => {
+    const response = await fetchWithCreds(`${API_URL}/audit/${branch}`);
+    return response.json();
+  },
+
+  updateThumbnail: async (branch, namespace, modelIdentifier, thumbnailBlob) => {
+    const formData = new FormData();
+    formData.append('thumbnail', thumbnailBlob, 'thumbnail.png');
+    const response = await fetchWithCreds(
+      `${API_URL}/model/${branch}/${namespace}/${modelIdentifier}/thumbnail`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
+    return response.json();
   }
 };

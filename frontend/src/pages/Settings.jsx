@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Button, Input, Label, Dropdown, Modal, TextField, Switch } from '@heroui/react';
-import { Trash2, Plus, ArrowLeft, Key, User, Server, RefreshCw, Sun, Moon } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Key, User, Server, RefreshCw, Sun, Moon, AlertTriangle, Image as ImageIcon, CheckCircle } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/constants';
+import { api } from '../services/api';
+import { Canvas, useThree } from '@react-three/fiber';
+import { OrbitControls } from '../components/models/OrbitControls';
+import { MinecraftModel } from '../components/models/MinecraftModel';
 
 const fetchWithCreds = (url, options = {}) => {
   return fetch(url, {
@@ -13,10 +17,25 @@ const fetchWithCreds = (url, options = {}) => {
   });
 };
 
+const SceneCapture = ({ onRegister }) => {
+  const { gl, scene, camera } = useThree();
+
+  useEffect(() => {
+    if (onRegister) {
+      onRegister(() => {
+        gl.render(scene, camera);
+        return gl.domElement.toDataURL('image/png');
+      });
+    }
+  }, [gl, scene, camera, onRegister]);
+
+  return null;
+};
+
 const Settings = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { user, isAdmin, isDark, setIsDark } = useAuth();
+  const { user, isAdmin, isDark, setIsDark, branch } = useAuth();
   const { showMessage } = useToast();
   const navigate = useNavigate();
 
@@ -40,6 +59,13 @@ const Settings = () => {
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newServerApiKey, setNewServerApiKey] = useState('');
   const [heartbeatLoading, setHeartbeatLoading] = useState(false);
+
+  // Audit State
+  const [auditIssues, setAuditIssues] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
+  const [currentThumbnailModel, setCurrentThumbnailModel] = useState(null);
+  const captureThumbnailRef = useRef(null);
 
   const fetchServers = useCallback(async () => {
     try {
@@ -280,6 +306,59 @@ const Settings = () => {
     }
   };
 
+  // Audit Functions
+  const runAudit = async () => {
+    setAuditLoading(true);
+    try {
+      const data = await api.auditModels(branch);
+      setAuditIssues(data.issues);
+      if (data.issues.length === 0) {
+        showMessage("No issues found!", "success");
+      }
+    } catch (error) {
+      console.error("Audit failed:", error);
+      showMessage("Failed to run audit", "error");
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const generateThumbnails = async () => {
+    const missingThumbnails = auditIssues.filter(i => i.issue === "Missing thumbnail");
+    if (missingThumbnails.length === 0) {
+      showMessage("No missing thumbnails to generate.");
+      return;
+    }
+
+    setGeneratingThumbnails(true);
+    
+    for (const issue of missingThumbnails) {
+      try {
+        // Fetch model data to render
+        const modelData = await api.getModelDetail(branch, issue.namespace, issue.model_identifier);
+        setCurrentThumbnailModel(modelData);
+        
+        // Wait for render and capture (handled by effect below)
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Give time to render
+        
+        if (captureThumbnailRef.current) {
+            const dataUrl = captureThumbnailRef.current();
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+            
+            await api.updateThumbnail(branch, issue.namespace, issue.model_identifier, blob);
+        }
+      } catch (e) {
+        console.error(`Failed to generate thumbnail for ${issue.model_identifier}`, e);
+      }
+    }
+    
+    setCurrentThumbnailModel(null);
+    setGeneratingThumbnails(false);
+    showMessage("Thumbnail generation complete");
+    runAudit(); // Refresh list
+  };
+
   if (loading) return <div>Loading...</div>;
 
   const StatusIndicator = ({ connected }) => {
@@ -346,6 +425,73 @@ const Settings = () => {
                   <Key className="mr-2 h-4 w-4" /> Change Password / Username
                 </Button>
               </div>
+            </div>
+          </div>
+
+          {/* Model Audit */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6" /> Model Audit
+            </h2>
+            <div className="bg-card border border-card rounded-lg p-6 space-y-4">
+              <div className="flex gap-4">
+                <Button onPress={runAudit} disabled={auditLoading}>
+                  {auditLoading ? 'Scanning...' : 'Scan for Issues'}
+                </Button>
+                {auditIssues.some(i => i.issue === "Missing thumbnail") && (
+                  <Button onPress={generateThumbnails} disabled={generatingThumbnails}>
+                    <ImageIcon className="mr-2 h-4 w-4" />
+                    {generatingThumbnails ? 'Generating...' : 'Generate Missing Thumbnails'}
+                  </Button>
+                )}
+              </div>
+
+              {/* Hidden Canvas for Thumbnail Generation */}
+              {currentThumbnailModel && (
+                <div className="fixed top-0 left-0 opacity-0 pointer-events-none w-[256px] h-[256px]">
+                   <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ position: [2, 2, 2], fov: 65 }}>
+                      <Suspense fallback={null}>
+                        <ambientLight intensity={0.6} />
+                        <directionalLight position={[5, 5, 5]} intensity={0.8} />
+                        <pointLight position={[-5, -5, -5]} intensity={0.3} />
+                        <MinecraftModel 
+                            modelData={currentThumbnailModel.minecraft_model} 
+                            bbModelData={currentThumbnailModel.bbmodel} 
+                            branch={branch}
+                            namespace={currentThumbnailModel.namespace}
+                            modelIdentifier={currentThumbnailModel.model_identifier}
+                        />
+                        <OrbitControls enableZoom={false} enablePan={false} />
+                        <SceneCapture onRegister={(fn) => (captureThumbnailRef.current = fn)} />
+                      </Suspense>
+                    </Canvas>
+                </div>
+              )}
+
+              {auditIssues.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-secondary">
+                      <tr>
+                        <th className="p-3 text-left">Namespace</th>
+                        <th className="p-3 text-left">Model</th>
+                        <th className="p-3 text-left">Issue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditIssues.map((issue, idx) => (
+                        <tr key={idx} className="border-t border-card">
+                          <td className="p-3">{issue.namespace}</td>
+                          <td className="p-3">{issue.model_identifier}</td>
+                          <td className="p-3 text-red-500">{issue.issue}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                !auditLoading && <div className="text-green-500 flex items-center gap-2"><CheckCircle size={16}/> No issues found.</div>
+              )}
             </div>
           </div>
 

@@ -6,6 +6,9 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [branch, setBranch] = useState(() => {
+    return localStorage.getItem('currentBranch') || 'dev';
+  });
   const [isDark, setIsDark] = useState(() => {
     // Check cookie for theme preference
     const match = document.cookie.match(new RegExp('(^| )theme=([^;]+)'));
@@ -16,6 +19,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('currentBranch', branch);
+  }, [branch]);
 
   useEffect(() => {
     // Update cookie and DOM when theme changes
@@ -85,7 +92,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin: user?.role === 'admin', isDark, setIsDark }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin: user?.role === 'admin', isDark, setIsDark, branch, setBranch }}>
       {!loading && children}
     </AuthContext.Provider>
   );

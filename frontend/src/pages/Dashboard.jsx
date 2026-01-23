@@ -19,7 +19,7 @@ import { api } from '../services/api';
 
 export const Dashboard = () => {
   const { message, showMessage } = useToast();
-  const { logout, isDark, setIsDark } = useAuth();
+  const { logout, isDark, setIsDark, branch, setBranch } = useAuth();
   const navigate = useNavigate();
   
   const {
@@ -31,6 +31,20 @@ export const Dashboard = () => {
     deleteBranch,
     mergeBranches,
   } = useBranches();
+
+  // Sync branch state with useAuth
+  useEffect(() => {
+    if (currentBranch !== branch) {
+      setBranch(currentBranch);
+    }
+  }, [currentBranch, branch, setBranch]);
+
+  // If branch changes in settings (via useAuth), update local state
+  useEffect(() => {
+    if (branch && branch !== currentBranch) {
+      setCurrentBranch(branch);
+    }
+  }, [branch, currentBranch, setCurrentBranch]);
 
   const {
     models,
