@@ -70,7 +70,7 @@ export const TopBar = ({
         )}
 
         {isAdmin && onNewBranch && (
-          <Button onPress={onNewBranch} className="bg-secondary hover:bg-secondary-hover text-secondary-foreground">
+          <Button onPress={onNewBranch} className="bg-secondary rounded-lg hover:bg-secondary-hover text-secondary-foreground">
             + New Branch
           </Button>
         )}
