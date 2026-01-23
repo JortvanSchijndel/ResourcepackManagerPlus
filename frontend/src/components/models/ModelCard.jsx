@@ -12,10 +12,7 @@ export const ModelCard = ({
                             branch,
                             allTags,
                             isAdmin,
-                            isReview,
-                            onMouseEnter,
-                            onMouseLeave,
-                            isHovered
+                            isReview
                           }) => {
   const [tags, setTags] = useState([]);
 
@@ -38,8 +35,6 @@ export const ModelCard = ({
       <div
           className={`bg-card rounded-lg border overflow-hidden transition-all hover:shadow-lg cursor-pointer ${isReview ? 'border-warning' : 'border-card hover:border-border-hover'}`}
           onClick={onModelClick}
-          onMouseEnter={onMouseEnter}
-          onMouseLeave={onMouseLeave}
       >
         <div className="model-preview-container relative">
             <ModelPreview 
@@ -48,11 +43,6 @@ export const ModelCard = ({
               branch={branch}
               namespace={model.namespace}
               modelIdentifier={model.model_identifier}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreviewClick();
-              }} 
-              isHovered={isHovered}
             />
         </div>
 

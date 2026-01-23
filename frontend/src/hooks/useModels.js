@@ -14,31 +14,6 @@ export const useModels = (currentBranch) => {
       const data = await api.getModels(currentBranch);
       const modelsList = data.models || [];
       setModels(modelsList);
-
-      // Load previews for models with bbmodel
-      modelsList.forEach(async (model) => {
-        if (model.has_bbmodel) {
-          try {
-            const detailData = await api.getModelDetail(
-              currentBranch,
-              model.namespace,
-              model.model_identifier
-            );
-            // Store both bbmodel and minecraft_model
-            if (detailData.bbmodel || detailData.minecraft_model) {
-              setModelPreviews((prev) => ({
-                ...prev,
-                [`${model.namespace}-${model.model_identifier}`]: {
-                    bbmodel: detailData.bbmodel,
-                    minecraft_model: detailData.minecraft_model
-                },
-              }));
-            }
-          } catch (err) {
-            console.error('Error loading preview:', err);
-          }
-        }
-      });
     } catch (error) {
       console.error('Error loading models:', error);
     }
