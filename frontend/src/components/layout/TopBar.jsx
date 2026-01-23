@@ -49,10 +49,10 @@ export const TopBar = ({
             <span className="text-sm text-muted">Branch:</span>
             <Dropdown>
               <Dropdown.Trigger>
-                <Button className="min-w-40 justify-between border border-default hover:bg-muted rounded-lg px-3 py-2 text-sm transition-all flex items-center gap-2">
+                <div className="min-w-40 justify-between border border-default hover:bg-muted-hover-hover bg-muted rounded-lg px-3 py-2 text-sm transition-all flex items-center gap-2 cursor-pointer">
                   <span>{currentBranch}</span>
                   <ChevronsUpDown size={14} className="text-muted" />
-                </Button>
+                </div>
               </Dropdown.Trigger>
               <Dropdown.Popover className="w-[--trigger-width]">
                 <Dropdown.Menu 
@@ -86,10 +86,10 @@ export const TopBar = ({
 
         <Dropdown>
           <Dropdown.Trigger>
-            <Button className="bg-muted hover:bg-muted-hover text-foreground rounded-lg px-4 py-2 text-sm font-medium transition-all flex items-center gap-2">
+            <div className="bg-muted hover:bg-muted-hover text-foreground rounded-lg px-4 py-2 text-sm font-medium transition-all flex items-center gap-2 cursor-pointer">
               <span>{user?.username}</span>
               <ChevronsUpDown size={14} className="text-muted" />
-            </Button>
+            </div>
           </Dropdown.Trigger>
           <Dropdown.Popover className="w-[--trigger-width]">
             <Dropdown.Menu onAction={handleUserMenuAction}>

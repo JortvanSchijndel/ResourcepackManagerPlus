@@ -202,9 +202,9 @@ export const MergeModal = ({ show, branches, onClose, onSubmit, loading }) => {
                       </Label>
                       <Dropdown>
                         <Dropdown.Trigger>
-                          <Button className="w-full justify-between">
+                          <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                             {source}
-                          </Button>
+                          </div>
                         </Dropdown.Trigger>
                         <Dropdown.Popover className="w-(--trigger-width)">
                           <Dropdown.Menu onAction={(key) => setSource(key)}>
@@ -224,9 +224,9 @@ export const MergeModal = ({ show, branches, onClose, onSubmit, loading }) => {
                       </Label>
                       <Dropdown>
                         <Dropdown.Trigger>
-                          <Button className="w-full justify-between">
+                          <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                             {target}
-                          </Button>
+                          </div>
                         </Dropdown.Trigger>
                         <Dropdown.Popover className="w-(--trigger-width)">
                           <Dropdown.Menu onAction={(key) => setTarget(key)}>

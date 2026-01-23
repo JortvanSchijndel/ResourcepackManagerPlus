@@ -614,9 +614,9 @@ const Settings = () => {
                           <td className="p-4">
                             <Dropdown>
                               <Dropdown.Trigger asChild>
-                                <Button className="w-32 justify-between" isDisabled={u.id === user?.id}>
+                                <div className="hover:bg-muted-hover-hover bg-muted text-primary w-32 justify-between flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                                   {u.role}
-                                </Button>
+                                </div>
                               </Dropdown.Trigger>
                               <Dropdown.Popover>
                                 <Dropdown.Menu onAction={(key) => handleUpdateRole(u.id, key)}>
@@ -662,9 +662,9 @@ const Settings = () => {
                         <Label>Role</Label>
                         <Dropdown>
                           <Dropdown.Trigger asChild>
-                            <Button className="w-full justify-between">
+                            <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                               {newRole}
-                            </Button>
+                            </div>
                           </Dropdown.Trigger>
                           <Dropdown.Popover>
                             <Dropdown.Menu onAction={setNewRole}>

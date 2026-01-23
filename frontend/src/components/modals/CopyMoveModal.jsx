@@ -73,9 +73,9 @@ export const CopyMoveModal = ({
                   </Label>
                   <Dropdown>
                     <Dropdown.Trigger>
-                      <Button className="w-full justify-between font-normal">
+                      <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between font-normal flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                         {copyMode === 'copy' ? 'Copy (keep original)' : 'Move (delete original)'}
-                      </Button>
+                      </div>
                     </Dropdown.Trigger>
                     <Dropdown.Popover className="w-(--trigger-width)">
                       <Dropdown.Menu onAction={(key) => setCopyMode(key)}>
@@ -98,9 +98,9 @@ export const CopyMoveModal = ({
                   </Label>
                   <Dropdown>
                     <Dropdown.Trigger>
-                      <Button className="w-full justify-between font-normal">
+                      <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between font-normal flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                         {targetBranch || 'Select branch'}
-                      </Button>
+                      </div>
                     </Dropdown.Trigger>
                     <Dropdown.Popover className="w-(--trigger-width)">
                       <Dropdown.Menu onAction={(key) => setTargetBranch(key)}>
@@ -120,9 +120,9 @@ export const CopyMoveModal = ({
                   </Label>
                   <Dropdown>
                     <Dropdown.Trigger>
-                      <Button className="w-full justify-between font-normal">
+                      <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between font-normal flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                         {targetArea || 'Select area...'}
-                      </Button>
+                      </div>
                     </Dropdown.Trigger>
                     <Dropdown.Popover className="w-(--trigger-width)">
                       <Dropdown.Menu onAction={(key) => setTargetArea(key)}>
@@ -142,9 +142,9 @@ export const CopyMoveModal = ({
                   </Label>
                   <Dropdown>
                     <Dropdown.Trigger>
-                      <Button className="w-full justify-between font-normal">
+                      <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between font-normal flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                         {targetCategory || 'Select category...'}
-                      </Button>
+                      </div>
                     </Dropdown.Trigger>
                     <Dropdown.Popover className="w-(--trigger-width)">
                       <Dropdown.Menu onAction={(key) => setTargetCategory(key)}>

@@ -63,9 +63,9 @@ return (
               </Label>
               <Dropdown>
                 <Dropdown.Trigger>
-                  <Button className="w-full justify-between">
+                  <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
                     {copyFrom || 'Select branch'}
-                  </Button>
+                  </div>
                 </Dropdown.Trigger>
                 <Dropdown.Popover className="w-(--trigger-width)">
                   <Dropdown.Menu onAction={(key) => setCopyFrom(key)} className="bg-popover">
