@@ -633,6 +633,99 @@ def list_models(branch_name):
     return jsonify({"models": models})
 
 
+@app.route('/api/audit/<branch_name>', methods=['GET'])
+@login_required
+def audit_models(branch_name):
+    branch_path = _get_branch_path(branch_name)
+    assets_path = branch_path / "assets"
+    
+    issues = []
+    
+    if assets_path.exists():
+        for namespace_dir in assets_path.iterdir():
+            if not namespace_dir.is_dir():
+                continue
+
+            namespace = namespace_dir.name
+            models_path = namespace_dir / "models" / "item"
+
+            if models_path.exists():
+                for model_identifier_dir in models_path.iterdir():
+                    if not model_identifier_dir.is_dir():
+                        continue
+
+                    model_identifier = model_identifier_dir.name
+                    
+                    # Check for .bbmodel
+                    bbmodel_files = list(model_identifier_dir.glob("*.bbmodel"))
+                    if not bbmodel_files:
+                        issues.append({
+                            "namespace": namespace,
+                            "model_identifier": model_identifier,
+                            "issue": "Missing .bbmodel file"
+                        })
+                    
+                    # Check metadata and thumbnail
+                    metadata_file = model_identifier_dir / "metadata.json"
+                    if not metadata_file.exists():
+                        issues.append({
+                            "namespace": namespace,
+                            "model_identifier": model_identifier,
+                            "issue": "Missing metadata.json"
+                        })
+                    else:
+                        try:
+                            with open(metadata_file, 'r') as f:
+                                metadata = json.load(f)
+                                if not metadata.get("thumbnail"):
+                                    issues.append({
+                                        "namespace": namespace,
+                                        "model_identifier": model_identifier,
+                                        "issue": "Missing thumbnail"
+                                    })
+                        except Exception as e:
+                            issues.append({
+                                "namespace": namespace,
+                                "model_identifier": model_identifier,
+                                "issue": f"Corrupt metadata.json: {str(e)}"
+                            })
+                            
+    return jsonify({"issues": issues})
+
+
+@app.route('/api/model/<branch_name>/<namespace>/<model_identifier>/thumbnail', methods=['POST'])
+@login_required
+def update_thumbnail(branch_name, namespace, model_identifier):
+    thumbnail_file = request.files.get('thumbnail')
+    
+    if not thumbnail_file:
+        return jsonify({"error": "Thumbnail file required"}), 400
+        
+    branch_path = _get_branch_path(branch_name)
+    models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
+    metadata_path = models_dir / "metadata.json"
+    
+    if not metadata_path.exists():
+        return jsonify({"error": "Metadata not found"}), 404
+        
+    try:
+        thumbnail_data = thumbnail_file.read()
+        thumbnail_base64 = f"data:image/png;base64,{base64.b64encode(thumbnail_data).decode('utf-8')}"
+        
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+            
+        metadata["thumbnail"] = thumbnail_base64
+        metadata["updated"] = datetime.now().isoformat()
+        
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+            
+        return jsonify({"success": True, "message": "Thumbnail updated"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/upload/<branch_name>', methods=['POST'])
 @login_required
 def upload_model(branch_name):
