@@ -16,9 +16,13 @@ import requests
 import uuid
 import logging
 import io
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_change_this_in_production'
+app.secret_key = os.getenv('SECRET_KEY', 'super_secret_key_change_this_in_production')
 CORS(app, supports_credentials=True)
 
 # Logging
@@ -1776,4 +1780,7 @@ def rename_file():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5000)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('DEBUG', 'True').lower() == 'true'
+    app.run(host=host, debug=debug, port=port)

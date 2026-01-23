@@ -11,9 +11,11 @@ export default defineConfig(({ mode }) => {
         tailwindcss(),
     ],
     server: {
+      host: env.HOST || '0.0.0.0',
+      port: parseInt(env.PORT) || 3000,
       proxy: {
-        [env.VITE_API_BASE_PATH]: {
-          target: env.VITE_API_TARGET_URL,
+        '/api': {
+          target: env.API_URL || 'http://localhost:5000',
           changeOrigin: true,
         }
       }
