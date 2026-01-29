@@ -37,3 +37,4 @@ backend/config.yaml
 /plugin/ResourcepackManager/.idea/
 /plugin/ResourcepackManager/build/
 .aider*
+/backend/branding/
