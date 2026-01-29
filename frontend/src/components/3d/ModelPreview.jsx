@@ -31,7 +31,7 @@ export const ModelPreview = ({onClick, branch, namespace, modelIdentifier }) => 
     }, []);
 
     // Construct thumbnail URL - assuming it's automatically generated on upload
-    const thumbnailUrl = branch && namespace && modelIdentifier 
+    const thumbnailUrl = branch && namespace && modelIdentifier
         ? `${API_URL}/thumbnail/${branch}/${namespace}/${modelIdentifier}.png`
         : null;
 
@@ -43,8 +43,8 @@ export const ModelPreview = ({onClick, branch, namespace, modelIdentifier }) => 
         >
             <div className="w-full h-full flex items-center justify-center bg-card/50">
                 {thumbnailUrl && isVisible ? (
-                    <img 
-                        src={thumbnailUrl} 
+                    <img
+                        src={thumbnailUrl}
                         alt={`${namespace}:${modelIdentifier}`}
                         className="w-full h-full object-contain p-2"
                         onError={(e) => {
@@ -53,9 +53,9 @@ export const ModelPreview = ({onClick, branch, namespace, modelIdentifier }) => 
                         }}
                     />
                 ) : null}
-                
+
                 {/* Fallback if image fails or doesn't exist */}
-                <div className="hidden w-full h-full flex items-center justify-center text-muted text-sm" style={{ display: (thumbnailUrl && isVisible) ? 'none' : 'flex' }}>
+                <div className="w-full h-full flex items-center justify-center text-muted text-sm" style={{ display: (thumbnailUrl && isVisible) ? 'none' : 'flex' }}>
                     <div className="text-4xl opacity-20">📦</div>
                 </div>
             </div>

@@ -3,6 +3,7 @@ import { ModelCard } from './ModelCard';
 import { ModelDetailModal } from '../modals/ModelDetailModal';
 import { api } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
+import { Card } from '@heroui/react';
 
 export const ModelGrid = ({
                             models,
@@ -45,13 +46,13 @@ export const ModelGrid = ({
 
   if (models.length === 0) {
     return (
-        <div className="bg-card rounded-xl p-6 border border-card transition-colors">
-          <div className="text-center py-16 text-muted">
+        <Card>
+          <Card.Content className="text-center py-16">
             <div className="text-5xl mb-4">📦</div>
-            <div className="text-lg mb-2 text-secondary">No models found</div>
-            <div className="text-sm text-tertiary">Upload your first model to get started</div>
-          </div>
-        </div>
+            <div className="text-lg mb-2">No models found</div>
+            <div className="text-sm">Upload your first model to get started</div>
+          </Card.Content>
+        </Card>
     );
   }
 
@@ -75,10 +76,10 @@ export const ModelGrid = ({
       <>
         {/* Review Section (Only visible if there are models in review) */}
         {reviewModels.length > 0 && (
-          <div className="mb-12 border-b border-border pb-8">
-            <div className="text-lg font-bold text-warning mb-6 flex items-center gap-2">
+          <div className="mb-12 border-b pb-8">
+            <div className="text-lg font-bold mb-6 flex items-center gap-2">
               ⚠️ Models for Review
-              <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-medium bg-warning-soft-hover text-warning border border-warning/30">
+              <span className="inline-block px-2.5 py-1 text-xs font-medium border">
                 {reviewModels.length}
               </span>
             </div>
@@ -113,9 +114,9 @@ export const ModelGrid = ({
         {/* Approved Models */}
         {Object.entries(groupedApprovedModels).map(([group, groupModels]) => (
             <div key={group} className="mb-8">
-              <div className="text-sm font-semibold text-secondary uppercase tracking-wide mb-4 flex items-center gap-2">
+              <div className="text-sm font-semibold uppercase tracking-wide mb-4 flex items-center gap-2">
                 📁 {group}
-                <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-medium bg-secondary text-secondary-foreground border border-default transition-colors">
+                <span className="inline-block px-2.5 py-1 text-xs font-medium border transition-colors">
               {groupModels.length}
             </span>
               </div>

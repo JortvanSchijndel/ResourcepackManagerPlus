@@ -36,3 +36,4 @@ backend/config.yaml
 /plugin/ResourcepackManager/.gradle/
 /plugin/ResourcepackManager/.idea/
 /plugin/ResourcepackManager/build/
+.aider*

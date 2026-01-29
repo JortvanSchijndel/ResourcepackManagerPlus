@@ -18,6 +18,21 @@ export const api = {
     return response.json();
   },
 
+  renameTagGroup: async (oldGroupName, newGroupName) => {
+    const response = await fetchWithCreds(`${API_URL}/tag-groups/${encodeURIComponent(oldGroupName)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_group_name: newGroupName }),
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : null;
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Failed to rename tag group');
+    }
+    return data;
+  },
+
   // Servers
   getServers: async () => {
     const response = await fetchWithCreds(`${API_URL}/servers`);
@@ -191,6 +206,23 @@ export const api = {
       body: JSON.stringify(tag),
     });
     return response.json();
+  },
+
+  updateTag: async (tagId, updatedTagData) => {
+    const response = await fetchWithCreds(`${API_URL}/tags/${tagId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedTagData),
+    });
+
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : null;
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Failed to update tag');
+    }
+
+    return data;
   },
 
   // Raw File Editor

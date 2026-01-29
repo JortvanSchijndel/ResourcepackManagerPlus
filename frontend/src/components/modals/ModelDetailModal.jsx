@@ -1,8 +1,8 @@
 import React, { useState, useEffect, Suspense, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "../models/OrbitControls";
-import { Modal, Button, Input } from "@heroui/react";
-import { MinecraftModel } from "../models/MinecraftModel";
+import { OrbitControls } from "../3d/OrbitControls";
+import { Modal, Button, Input, AlertDialog } from "@heroui/react";
+import { MinecraftModel } from "../3d/MinecraftModel";
 import { api } from '../../services/api';
 
 export const ModelDetailModal = ({
@@ -142,13 +142,12 @@ export const ModelDetailModal = ({
 
     return (
         <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <Modal.Backdrop>
+            <Modal.Backdrop className="backdrop-blur-(--blur)">
                 <Modal.Container>
-                    <Modal.Dialog className="bg-background border border-card max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col md:flex-row">
-                        <Modal.CloseTrigger className="absolute top-4 right-4 z-10" />
+                    <Modal.Dialog className="bg-transparent max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col md:flex-row shadow-none">
 
                         {/* Left Column: Preview & Info */}
-                        <div className="flex-1 p-6 border-b md:border-b-0 md:border-r border-card overflow-y-auto">
+                        <div className="flex-1 p-6 overflow-y-auto bg-(--bg-primary) rounded-(--other-radius) mr-4">
                             <Modal.Header className="p-0 mb-6">
                                 <div className="flex justify-between items-start">
                                     <Modal.Heading className="text-xl font-bold text-foreground">
@@ -260,47 +259,51 @@ export const ModelDetailModal = ({
                         </div>
 
                         {/* Right Column: Comments & Actions */}
-                        <div className="w-full md:w-87.5 flex flex-col bg-card/50">
-                            <div className="flex-1 p-6 overflow-y-auto">
-                                <div className="text-sm font-semibold text-secondary mb-4">Comments & History</div>
-                                
-                                <div className="space-y-4 mb-6">
-                                    {comments.length === 0 ? (
-                                        <div className="text-sm text-muted italic">No comments yet.</div>
-                                    ) : (
-                                        comments.map((comment, idx) => (
-                                            <div key={idx} className="bg-card border border-card p-3 rounded-lg text-sm">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="font-semibold text-primary">{comment.user}</span>
-                                                    <span className="text-xs text-tertiary">
-                                                        {new Date(comment.timestamp).toLocaleDateString()}
-                                                    </span>
+                        <div className="w-full md:w-87.5 flex flex-col gap-4">
+                            <div className="flex-1 flex flex-col bg-(--bg-primary) rounded-(--other-radius) overflow-hidden">
+                                <div className="flex-1 p-6 overflow-y-auto">
+                                    <h3 className="text-sm font-semibold text-secondary mb-4">Comments &amp; History</h3>
+                                    
+                                    <div className="space-y-4">
+                                        {(comments?.length || 0) === 0 ? (
+                                            <div className="text-sm text-muted italic">No comments yet.</div>
+                                        ) : (
+                                            comments.map((comment, idx) => (
+                                                <div key={idx} className="bg-card border border-card p-3 rounded-lg text-sm">
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className="font-semibold text-primary">{comment.user}</span>
+                                                        <span className="text-xs text-tertiary">
+                                                            {new Date(comment.timestamp).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-foreground">{comment.text}</div>
                                                 </div>
-                                                <div className="text-foreground">{comment.text}</div>
-                                            </div>
-                                        ))
-                                    )}
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div className="mt-auto">
-                                    <Input 
+                                <div className="p-6 pt-2 bg-(--bg-primary)">
+                                    <Input
+                                        fullWidth
                                         placeholder="Add a comment..." 
                                         value={commentText}
                                         onChange={(e) => setCommentText(e.target.value)}
                                         className="mb-2"
                                     />
-                                    <Button 
-                                        size="sm" 
-                                        className="w-full" 
-                                        onPress={handleAddComment}
-                                        disabled={submittingComment || !commentText.trim()}
-                                    >
-                                        Post Comment
-                                    </Button>
+                                    <div className="flex justify-end">
+                                        <Button
+                                            size="sm"
+                                            onPress={handleAddComment}
+                                            disabled={submittingComment || !commentText.trim()}
+                                        >
+                                            Post Comment
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="p-6 border-t border-card bg-background">
+                            <div className="p-6 bg-(--bg-primary) rounded-(--other-radius)">
                                 <div className="flex flex-col gap-2">
                                     {isReview && isAdmin && (
                                         <Button onPress={handleApprove} className="bg-success text-white w-full mb-2">
@@ -310,21 +313,44 @@ export const ModelDetailModal = ({
                                     
                                     <div className="grid grid-cols-2 gap-2">
                                         {onEdit && (
-                                            <Button onPress={() => onEdit(model)}>Edit / New Version</Button>
+                                            <Button fullWidth onPress={() => onEdit(model)}>Edit / New Version</Button>
                                         )}
                                         {model.has_bbmodel && (
-                                            <Button onPress={handleDownload}>
+                                            <Button fullWidth onPress={handleDownload}>
                                                 Download BBModel
                                             </Button>
                                         )}
                                         {onCopyMove && (
-                                            <Button onPress={() => onCopyMove(model)}>Copy/Move</Button>
+                                            <Button fullWidth onPress={() => onCopyMove(model)}>Copy/Move</Button>
                                         )}
                                         {isAdmin && onDelete && (
-                                            <Button onPress={() => onDelete(model)} className="bg-danger">Delete</Button>
+                                            <AlertDialog>
+                                                <AlertDialog.Trigger>
+                                                    <Button variant="danger" fullWidth onPointerDown={(e) => e.stopPropagation()}>Delete</Button>
+                                                </AlertDialog.Trigger>
+                                                <AlertDialog.Backdrop>
+                                                    <AlertDialog.Container>
+                                                        <AlertDialog.Dialog>
+                                                            <AlertDialog.CloseTrigger />
+                                                            <AlertDialog.Header>
+                                                                <AlertDialog.Icon status="danger" />
+                                                                <AlertDialog.Heading>Delete Model</AlertDialog.Heading>
+                                                            </AlertDialog.Header>
+                                                            <AlertDialog.Body>
+                                                                Are you sure you want to permanently delete this model? This action cannot be undone.
+                                                            </AlertDialog.Body>
+                                                            <AlertDialog.Footer>
+                                                                <Button slot="close" variant="tertiary" size="sm">Cancel</Button>
+                                                                <Button slot="close" variant="danger" size="sm" onPress={() => { onDelete(model); }}>
+                                                                    Delete
+                                                                </Button>
+                                                            </AlertDialog.Footer>
+                                                        </AlertDialog.Dialog>
+                                                    </AlertDialog.Container>
+                                                </AlertDialog.Backdrop>
+                                            </AlertDialog>
                                         )}
                                     </div>
-                                    <Button onPress={onClose} variant="flat" className="mt-2">Close</Button>
                                 </div>
                             </div>
                         </div>

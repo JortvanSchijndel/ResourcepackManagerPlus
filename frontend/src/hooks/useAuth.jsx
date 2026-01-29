@@ -9,12 +9,19 @@ export const AuthProvider = ({ children }) => {
   const [branch, setBranch] = useState(() => {
     return localStorage.getItem('currentBranch') || 'dev';
   });
-  const [isDark, setIsDark] = useState(() => {
-    // Check cookie for theme preference
+  
+  // 'light', 'dark', or 'system'
+  const [themePreference, setThemePreference] = useState(() => {
     const match = document.cookie.match(new RegExp('(^| )theme=([^;]+)'));
-    if (match) return match[2] === 'dark';
-    return true; // Default to dark
+    if (match) {
+        const val = match[2];
+        if (val === 'light' || val === 'dark' || val === 'system') return val;
+    }
+    return 'system'; 
   });
+
+  // Derived state for actual display
+  const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -25,14 +32,39 @@ export const AuthProvider = ({ children }) => {
   }, [branch]);
 
   useEffect(() => {
-    // Update cookie and DOM when theme changes
-    document.cookie = `theme=${isDark ? 'dark' : 'light'}; path=/; max-age=31536000`; // 1 year
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDark]);
+    const applyTheme = () => {
+      let effectiveDark = false;
+      if (themePreference === 'system') {
+        effectiveDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      } else {
+        effectiveDark = themePreference === 'dark';
+      }
+      
+      setIsDark(effectiveDark);
+
+      if (effectiveDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      
+      document.cookie = `theme=${themePreference}; path=/; max-age=31536000`; // 1 year
+    };
+
+    applyTheme();
+
+    // Listen for system changes if preference is system
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+        if (themePreference === 'system') {
+            applyTheme();
+        }
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+
+  }, [themePreference]);
 
   const checkAuth = async () => {
     try {
@@ -92,7 +124,18 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin: user?.role === 'admin', isDark, setIsDark, branch, setBranch }}>
+    <AuthContext.Provider value={{ 
+        user, 
+        login, 
+        logout, 
+        loading, 
+        isAdmin: user?.role === 'admin', 
+        isDark, // Actual applied theme (boolean)
+        themePreference, // 'light', 'dark', 'system'
+        setThemePreference, 
+        branch, 
+        setBranch 
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );

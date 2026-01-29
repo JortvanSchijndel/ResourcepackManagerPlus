@@ -1,14 +1,30 @@
-import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, useContext, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { Button, Input, Label, Dropdown, Modal, TextField, Switch } from '@heroui/react';
-import { Trash2, Plus, ArrowLeft, Key, User, Server, RefreshCw, Sun, Moon, AlertTriangle, Image as ImageIcon, CheckCircle } from 'lucide-react';
-import { useToast } from '../hooks/useToast';
+import {Button, Input, Label, Dropdown, Modal, TextField, Switch, Tabs, Select, ListBox, toast} from '@heroui/react';
+import {
+  Trash2,
+  Plus,
+  ArrowLeft,
+  Key,
+  User,
+  Server,
+  RefreshCw,
+  Sun,
+  Moon,
+  AlertTriangle,
+  Image as ImageIcon,
+  CheckCircle,
+  Tags,
+  GitBranch,
+  SunMoon
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/constants';
 import { api } from '../services/api';
+import { useBranches } from '../hooks/useBranches';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls } from '../components/models/OrbitControls';
-import { MinecraftModel } from '../components/models/MinecraftModel';
+import { OrbitControls } from '../components/3d/OrbitControls';
+import { MinecraftModel } from '../components/3d/MinecraftModel';
 
 const fetchWithCreds = (url, options = {}) => {
   return fetch(url, {
@@ -16,6 +32,8 @@ const fetchWithCreds = (url, options = {}) => {
     credentials: 'include',
   });
 };
+
+const BRAND_DEFAULT = 'oklch(0.58 0.256 293.597)';
 
 const SceneCapture = ({ onRegister }) => {
   const { gl, scene, camera } = useThree();
@@ -33,40 +51,71 @@ const SceneCapture = ({ onRegister }) => {
 };
 
 const Settings = () => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { user, isAdmin, isDark, setIsDark, branch } = useAuth();
-  const { showMessage } = useToast();
+  const [activeTab, setActiveTab] = useState('profile');
+  const { user, isAdmin, isDark, setIsDark, themePreference, setThemePreference, branch } = useAuth();
   const navigate = useNavigate();
 
+  // Branch selector state
+  const {
+    branches,
+    currentBranch: selectedAuditBranch,
+    setCurrentBranch: setSelectedAuditBranch,
+    loading: branchesLoading,
+  } = useBranches();
+
+  // State from original component
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [newUserOpen, setNewUserOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState('normal');
 
+  // Admin edit user modal state
+  const [editUserOpen, setEditUserOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUsername, setEditUsername] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState('normal');
+
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newSelfPassword, setNewSelfPassword] = useState('');
   const [newSelfUsername, setNewSelfUsername] = useState('');
-
   const [tags, setTags] = useState([]);
   const [newTag, setNewTag] = useState('');
   const [newTagColor, setNewTagColor] = useState('#000000');
   const [newTagGroup, setNewTagGroup] = useState('');
-
   const [servers, setServers] = useState([]);
   const [newServerName, setNewServerName] = useState('');
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newServerApiKey, setNewServerApiKey] = useState('');
   const [heartbeatLoading, setHeartbeatLoading] = useState(false);
-
-  // Audit State
   const [auditIssues, setAuditIssues] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
   const [currentThumbnailModel, setCurrentThumbnailModel] = useState(null);
   const captureThumbnailRef = useRef(null);
 
+  // Branding state
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
+  const [brandIconFile, setBrandIconFile] = useState(null);
+  const [brandIconPreview, setBrandIconPreview] = useState(null);
+  const [brandName, setBrandName] = useState('');
+
+  const colorInputValue = useMemo(() => {
+    const hexRegex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+    return hexRegex.test(brandColor) ? brandColor : '#3b82f6';
+  }, [brandColor]);
+
+  // Zorg dat de branch selector altijd een geldige branch heeft
+  useEffect(() => {
+    if (branches.length > 0 && (!selectedAuditBranch || !branches.includes(selectedAuditBranch))) {
+      setSelectedAuditBranch(branches[0]);
+    }
+  }, [branches, selectedAuditBranch, setSelectedAuditBranch]);
+
+  // Fetch functions (mostly unchanged)
   const fetchServers = useCallback(async () => {
     try {
       const response = await fetchWithCreds(`${API_URL}/servers`);
@@ -121,6 +170,7 @@ const Settings = () => {
   
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       if (isAdmin) {
         await fetchUsers();
       }
@@ -128,11 +178,43 @@ const Settings = () => {
       await fetchServers();
       await checkHeartbeats();
       setNewSelfUsername(user?.username || '');
+
+      // Fetch branding config (brand color + icon availability)
+      try {
+        const response = await fetchWithCreds(`${API_URL}/branding`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.brand) {
+            setBrandColor(data.brand);
+            // apply to document root variable
+            try {
+              document.documentElement.style.setProperty('--brand', data.brand);
+            } catch (e) {
+              // ignore if invalid CSS value
+            }
+          }
+          if (data?.name) {
+            setBrandName(data.name);
+            try {
+              if (data.name) document.title = data.name;
+            } catch (e) {
+              // ignore
+            }
+          }
+          if (data?.icon) {
+            setBrandIconPreview(`${API_URL}/branding/icon`);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch branding:', e);
+      }
+
       setLoading(false);
     };
     fetchData();
   }, [isAdmin, user, fetchServers, checkHeartbeats]);
 
+  // Handlers (unchanged)
   const handleAddServer = async (e) => {
     e.preventDefault();
     try {
@@ -143,17 +225,17 @@ const Settings = () => {
       });
       const result = await response.json();
       if (response.ok) {
-        showMessage(result.message || "Server added successfully");
+        toast.success(result.message || "Server added successfully");
         setNewServerName('');
         setNewServerUrl('');
         setNewServerApiKey('');
         await fetchServers();
         await checkHeartbeats();
       } else {
-        showMessage(result.error || 'Failed to add server', 'error');
+        toast.danger(result.error || 'Failed to add server');
       }
     } catch (error) {
-      showMessage('Failed to add server', 'error');
+      toast.danger('Failed to add server');
     }
   };
 
@@ -165,13 +247,13 @@ const Settings = () => {
       });
       const result = await response.json();
       if (response.ok) {
-        showMessage(result.message || "Server deleted successfully");
+        toast.success(result.message || "Server deleted successfully");
         await fetchServers();
       } else {
-        showMessage(result.error || 'Failed to delete server', 'error');
+        toast.danger(result.error || 'Failed to delete server');
       }
     } catch (error) {
-      showMessage('Failed to delete server', 'error');
+      toast.danger('Failed to delete server');
     }
   };
 
@@ -185,7 +267,7 @@ const Settings = () => {
       });
 
       if (response.ok) {
-        showMessage("User created successfully");
+        toast.success("User created successfully");
         setNewUserOpen(false);
         setNewUsername('');
         setNewPassword('');
@@ -193,10 +275,10 @@ const Settings = () => {
         await fetchUsers();
       } else {
         const data = await response.json();
-        showMessage(data.error || "Failed to create user", 'error');
+        toast.danger(data.error || "Failed to create user");
       }
     } catch (error) {
-      showMessage("An error occurred", 'error');
+      toast.danger("An error occurred");
     }
   };
 
@@ -207,11 +289,11 @@ const Settings = () => {
         method: 'DELETE',
       });
       if (response.ok) {
-        showMessage("User deleted successfully");
+        toast.success("User deleted successfully");
         await fetchUsers();
       } else {
         const data = await response.json();
-        showMessage(data.error || "Failed to delete user", 'error');
+        toast.danger(data.error || "Failed to delete user");
       }
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -226,11 +308,52 @@ const Settings = () => {
         body: JSON.stringify({ role: newRole }),
       });
       if (response.ok) {
-        showMessage("User role updated");
+        toast.success("User role updated");
         await fetchUsers();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.danger(data.error || "Failed to update role");
       }
     } catch (error) {
       console.error('Error updating role:', error);
+      toast.danger("Failed to update role");
+    }
+  };
+
+  const handleOpenEditUser = (u) => {
+    setEditingUser(u);
+    setEditUsername(u.username);
+    setEditRole(u.role);
+    setEditPassword('');
+    setEditUserOpen(true);
+  };
+
+  const handleSaveUser = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      const payload = { role: editRole, username: editUsername };
+      if (editPassword) payload.password = editPassword;
+
+      const response = await fetchWithCreds(`${API_URL}/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        toast.success("User updated successfully");
+        setEditUserOpen(false);
+        setEditingUser(null);
+        await fetchUsers();
+      } else {
+        toast.danger(data.error || "Failed to update user");
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      toast.danger("An error occurred");
     }
   };
 
@@ -248,16 +371,16 @@ const Settings = () => {
       });
 
       if (response.ok) {
-        showMessage("Profile updated successfully");
+        toast.success("Profile updated successfully");
         setChangePasswordOpen(false);
         setCurrentPassword('');
         setNewSelfPassword('');
       } else {
         const data = await response.json();
-        showMessage(data.error || "Failed to update profile", 'error');
+        toast.danger(data.error || "Failed to update profile");
       }
     } catch (error) {
-      showMessage("An error occurred", 'error');
+      toast.danger("An error occurred");
     }
   };
 
@@ -271,17 +394,17 @@ const Settings = () => {
       });
 
       if (response.ok) {
-        showMessage("Tag created successfully");
+        toast.success("Tag created successfully");
         setNewTag('');
         setNewTagColor('#000000');
         setNewTagGroup('');
         await fetchTags();
       } else {
         const data = await response.json();
-        showMessage(data.error || "Failed to create tag", 'error');
+        toast.danger(data.error || "Failed to create tag");
       }
     } catch (error) {
-      showMessage("An error occurred", 'error');
+      toast.danger("An error occurred");
     }
   };
 
@@ -295,38 +418,45 @@ const Settings = () => {
       });
 
       if (response.ok) {
-        showMessage("Tag deleted successfully");
+        toast.success("Tag deleted successfully");
         await fetchTags();
       } else {
         const data = await response.json();
-        showMessage(data.error || "Failed to delete tag", 'error');
+        toast.danger(data.error || "Failed to delete tag");
       }
     } catch (error) {
-      showMessage("An error occurred", 'error');
+      toast.danger("An error occurred");
     }
   };
 
-  // Audit Functions
   const runAudit = async () => {
+    if (!selectedAuditBranch) {
+      toast.danger("Selecteer eerst een branch voor de audit.");
+      return;
+    }
     setAuditLoading(true);
     try {
-      const data = await api.auditModels(branch);
+      const data = await api.auditModels(selectedAuditBranch);
       setAuditIssues(data.issues);
       if (data.issues.length === 0) {
-        showMessage("No issues found!", "success");
+        toast.success("No issues found!");
       }
     } catch (error) {
       console.error("Audit failed:", error);
-      showMessage("Failed to run audit", "error");
+      toast.danger("Failed to run audit");
     } finally {
       setAuditLoading(false);
     }
   };
 
   const generateThumbnails = async () => {
+    if (!selectedAuditBranch) {
+      toast.danger("Selecteer eerst een branch voor de audit.");
+      return;
+    }
     const missingThumbnails = auditIssues.filter(i => i.issue === "Missing thumbnail");
     if (missingThumbnails.length === 0) {
-      showMessage("No missing thumbnails to generate.");
+      toast.info("No missing thumbnails to generate.");
       return;
     }
 
@@ -334,19 +464,17 @@ const Settings = () => {
     
     for (const issue of missingThumbnails) {
       try {
-        // Fetch model data to render
-        const modelData = await api.getModelDetail(branch, issue.namespace, issue.model_identifier);
+        const modelData = await api.getModelDetail(selectedAuditBranch, issue.namespace, issue.model_identifier);
         setCurrentThumbnailModel(modelData);
         
-        // Wait for render and capture (handled by effect below)
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Give time to render
+        await new Promise(resolve => setTimeout(resolve, 1000)); 
         
         if (captureThumbnailRef.current) {
             const dataUrl = captureThumbnailRef.current();
             const res = await fetch(dataUrl);
             const blob = await res.blob();
             
-            await api.updateThumbnail(branch, issue.namespace, issue.model_identifier, blob);
+            await api.updateThumbnail(selectedAuditBranch, issue.namespace, issue.model_identifier, blob);
         }
       } catch (e) {
         console.error(`Failed to generate thumbnail for ${issue.model_identifier}`, e);
@@ -355,11 +483,117 @@ const Settings = () => {
     
     setCurrentThumbnailModel(null);
     setGeneratingThumbnails(false);
-    showMessage("Thumbnail generation complete");
-    runAudit(); // Refresh list
+    toast.success("Thumbnail generation complete");
+    runAudit();
   };
 
-  if (loading) return <div>Loading...</div>;
+  // Branding helpers
+  const applyBrandColor = (color) => {
+    try {
+      document.documentElement.style.setProperty('--brand', color);
+    } catch (e) {
+      // ignore invalid CSS values
+    }
+  };
+
+  const handleBrandColorChange = (value) => {
+    setBrandColor(value);
+    applyBrandColor(value);
+  };
+
+  const saveBrandColor = async () => {
+    try {
+      const response = await fetchWithCreds(`${API_URL}/branding/color`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand: brandColor }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        toast.success("Brand color saved");
+      } else {
+        toast.danger(data.error || "Failed to save brand color");
+      }
+    } catch (e) {
+      toast.danger("Failed to save brand color");
+    }
+  };
+
+  const resetBrandColor = async () => {
+    setBrandColor(BRAND_DEFAULT);
+    applyBrandColor(BRAND_DEFAULT);
+    try {
+      await fetchWithCreds(`${API_URL}/branding/color`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand: BRAND_DEFAULT }),
+      });
+      toast.success("Brand color reset");
+    } catch (e) {
+      // ignore backend failures for reset
+    }
+  };
+
+  const handleBrandNameChange = (value) => {
+    setBrandName(value);
+    try {
+      if (value) document.title = value;
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const saveBrandName = async () => {
+    try {
+      const response = await fetchWithCreds(`${API_URL}/branding/name`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: brandName }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        toast.success("Brand name saved");
+      } else {
+        toast.danger(data.error || "Failed to save brand name");
+      }
+    } catch (e) {
+      toast.danger("Failed to save brand name");
+    }
+  };
+
+  const handleIconSelect = (file) => {
+    setBrandIconFile(file || null);
+    if (file) {
+      setBrandIconPreview(URL.createObjectURL(file));
+    } else {
+      setBrandIconPreview(null);
+    }
+  };
+
+  const uploadBrandIcon = async () => {
+    if (!brandIconFile) {
+      toast.danger("Select a PNG 256x256 file first");
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('icon', brandIconFile);
+      const response = await fetchWithCreds(`${API_URL}/branding/icon`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        toast.success("Icon uploaded");
+        setBrandIconFile(null);
+        setBrandIconPreview(`${API_URL}/branding/icon?ts=${Date.now()}`);
+      } else {
+        toast.danger(data.error || "Failed to upload icon");
+      }
+    } catch (e) {
+      toast.danger("Failed to upload icon");
+    }
+  };
 
   const StatusIndicator = ({ connected }) => {
     let bgColor = 'bg-gray-400';
@@ -380,73 +614,219 @@ const Settings = () => {
     );
   };
 
-  return (
-      <div className={isDark ? 'dark' : ''}>
-        <div className="min-h-screen text-foreground transition-colors p-6 space-y-8 max-w-6xl mx-auto">
-          <div className="flex items-center gap-4 mb-6">
-            <Button variant="ghost" size="icon" onPress={() => navigate('/')}>
-              <ArrowLeft className="h-6 w-6" />
-            </Button>
-            <h1 className="text-3xl font-bold">Settings</h1>
-          </div>
+  const tabs = [
+    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'branding', label: 'Branding', icon: ImageIcon },
+    { id: 'tags', label: 'Tag Management', icon: Tags },
+    { id: 'audit', label: 'Model Audit', icon: AlertTriangle },
+    ...(isAdmin ? [{ id: 'users', label: 'User Management', icon: User }] : []),
+    { id: 'servers', label: 'Server Management', icon: Server },
+  ];
 
-          {/* Appearance Settings */}
+  const renderContent = () => {
+    if (loading) return <div className="flex justify-center items-center h-full"><p>Loading...</p></div>;
+
+    switch (activeTab) {
+      case 'profile':
+        return (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-2xl font-semibold flex items-center gap-2 mb-4">
+                {isDark ? <Moon className="h-6 w-6" /> : <Sun className="h-6 w-6" />} Appearance
+              </h2>
+              <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-[var(--txt-primary)]">Dark Mode</p>
+                    <p className="text-sm text-[var(--txt-secondary)]">Toggle between light and dark theme</p>
+                  </div>
+                  <Tabs
+                    aria-label="Theme"
+                    selectedKey={themePreference}
+                    onSelectionChange={(key) => {
+                      setThemePreference(key);
+                      if (key === "dark") {
+                        document.documentElement.classList.add("dark");
+                        document.cookie = "theme=dark; path=/";
+                      } else if (key === "light") {
+                        document.documentElement.classList.remove("dark");
+                        document.cookie = "theme=light; path=/";
+                      } else {
+                        // system
+                        document.cookie = "theme=system; path=/";
+                        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                          document.documentElement.classList.add("dark");
+                        } else {
+                          document.documentElement.classList.remove("dark");
+                        }
+                      }
+                    }}
+                    className="w-auto"
+                  >
+                    <Tabs.ListContainer>
+                      <Tabs.List aria-label="Theme">
+                        <Tabs.Tab id="light">
+                          <Sun className="size-4" />
+                          <Tabs.Indicator />
+                        </Tabs.Tab>
+                        <Tabs.Tab id="dark">
+                          <Moon className="size-4" />
+                          <Tabs.Indicator />
+                        </Tabs.Tab>
+                        <Tabs.Tab id="system">
+                          <SunMoon className="size-4" />
+                          <Tabs.Indicator />
+                        </Tabs.Tab>
+                      </Tabs.List>
+                    </Tabs.ListContainer>
+                  </Tabs>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold flex items-center gap-2 mb-4">
+                <User className="h-6 w-6" /> Profile Settings
+              </h2>
+              <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-[var(--txt-primary)]">Username: {user?.username}</p>
+                    <p className="text-sm text-[var(--txt-secondary)]">Role: {user?.role}</p>
+                  </div>
+                  <Button onPress={() => setChangePasswordOpen(true)}>
+                    <Key className="mr-2 h-4 w-4" /> Change Password / Username
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Branding moved to the dedicated Branding tab */}
+          </div>
+        );
+      case 'branding':
+        return (
           <div className="space-y-4">
-            <h2 className="text-2xl font-semibold flex items-center gap-2">
-              {isDark ? <Moon className="h-6 w-6" /> : <Sun className="h-6 w-6" />} Appearance
+            <h2 className="text-2xl font-semibold flex items-center gap-2 mb-4">
+              <ImageIcon className="h-6 w-6" /> Branding
             </h2>
-            <div className="bg-card border border-card rounded-lg p-6">
+            <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">Dark Mode</p>
-                  <p className="text-sm text-muted">Toggle between light and dark theme</p>
+                  <p className="font-medium text-[var(--txt-primary)]">Name</p>
+                  <p className="text-sm text-[var(--txt-secondary)]">Application name / title shown in the browser tab.</p>
                 </div>
-                <Switch isSelected={isDark} onChange={setIsDark}>
-                  <Switch.Control className={isDark ? "bg-(--primary)" : "bg-gray-300"}>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                </Switch>
+                <div className="flex items-center gap-2">
+                  <Input value={brandName} onChange={(e) => handleBrandNameChange(e.target.value)} placeholder="Application name" disabled={!isAdmin} />
+                  <div className="flex items-center gap-2">
+                    <Button onPress={saveBrandName} className="h-10" disabled={!isAdmin}>Save</Button>
+                    {!isAdmin && <span className="text-sm text-[var(--txt-secondary)]">Only admins can change branding.</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-[var(--txt-primary)]">Brand Color</p>
+                  <p className="text-sm text-[var(--txt-secondary)]">Choose a brand color using the color picker. This updates the --brand CSS variable.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input type="color" value={colorInputValue} onChange={(e) => handleBrandColorChange(e.target.value)} className="h-10 w-12 p-0" disabled={!isAdmin} />
+                  <div className="flex items-center gap-2">
+                    <Button onPress={saveBrandColor} className="h-10" disabled={!isAdmin}>Save</Button>
+                    <Button variant="outline" onPress={resetBrandColor} className="h-10" disabled={!isAdmin}>Reset</Button>
+                    {!isAdmin && <span className="text-sm text-[var(--txt-secondary)]">Only admins can change branding.</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-[var(--txt-primary)]">Brand Icon (256x256 PNG)</p>
+                  <p className="text-sm text-[var(--txt-secondary)]">Upload a 256x256 PNG to be used as an application icon.</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-16 h-16 border border-border rounded overflow-hidden bg-[var(--bg-quaternary)] flex items-center justify-center">
+                      {brandIconPreview ? <img src={brandIconPreview} alt="icon preview" className="w-full h-full object-cover" /> : <span className="text-sm text-[var(--txt-secondary)]">No icon</span>}
+                    </div>
+                    <input type="file" accept="image/png" onChange={(e) => handleIconSelect(e.target.files && e.target.files[0])} disabled={!isAdmin} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button onPress={uploadBrandIcon} className="h-10" disabled={!isAdmin}>Upload</Button>
+                    {!isAdmin && <span className="text-sm text-[var(--txt-secondary)]">Only admins can change branding.</span>}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+        );
+      case 'tags': {
+        const groupedTags = tags.reduce((acc, tag) => {
+          const group = tag.group || 'No Group';
+          if (!acc[group]) acc[group] = [];
+          acc[group].push(tag);
+          return acc;
+        }, {});
 
-          {/* Profile Settings */}
-          <div className="space-y-4">
-            <h2 className="text-2xl font-semibold flex items-center gap-2">
-              <User className="h-6 w-6" /> Profile Settings
-            </h2>
-            <div className="bg-card border border-card rounded-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Username: {user?.username}</p>
-                  <p className="text-sm text-muted">Role: {user?.role}</p>
-                </div>
-                <Button onPress={() => setChangePasswordOpen(true)}>
-                  <Key className="mr-2 h-4 w-4" /> Change Password / Username
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Model Audit */}
+        return <TagManagement
+          tags={tags}
+          groupedTags={groupedTags}
+          handleCreateTag={handleCreateTag}
+          newTag={newTag}
+          setNewTag={setNewTag}
+          newTagColor={newTagColor}
+          setNewTagColor={setNewTagColor}
+          newTagGroup={newTagGroup}
+          setNewTagGroup={setNewTagGroup}
+          handleDeleteTag={handleDeleteTag}
+          fetchTags={fetchTags}
+        />;
+      }
+      case 'audit':
+        return (
           <div className="space-y-4">
             <h2 className="text-2xl font-semibold flex items-center gap-2">
               <AlertTriangle className="h-6 w-6" /> Model Audit
             </h2>
-            <div className="bg-card border border-card rounded-lg p-6 space-y-4">
-              <div className="flex gap-4">
-                <Button onPress={runAudit} disabled={auditLoading}>
+            <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-4">
+              <div className="flex gap-4 items-center">
+                <div className="flex items-center gap-2">
+                  <Select
+                    className="w-[220px] select--primary"
+                    placeholder="Select branch"
+                    selectedKey={selectedAuditBranch || ''}
+                    onSelectionChange={setSelectedAuditBranch}
+                    isDisabled={branchesLoading}
+                  >
+                    <Select.Trigger className="select__trigger flex items-center gap-2">
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox>
+                        {branches.map((b) => (
+                          <ListBox.Item key={b} id={b} textValue={b}>
+                            <span className="flex items-center gap-2">
+                              <GitBranch size={16} className="text-[var(--txt-secondary)]" />
+                              <span>{b}</span>
+                            </span>
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                </div>
+                <Button onPress={runAudit} disabled={auditLoading || !selectedAuditBranch}>
                   {auditLoading ? 'Scanning...' : 'Scan for Issues'}
                 </Button>
                 {auditIssues.some(i => i.issue === "Missing thumbnail") && (
-                  <Button onPress={generateThumbnails} disabled={generatingThumbnails}>
+                  <Button onPress={generateThumbnails} disabled={generatingThumbnails || !selectedAuditBranch}>
                     <ImageIcon className="mr-2 h-4 w-4" />
                     {generatingThumbnails ? 'Generating...' : 'Generate Missing Thumbnails'}
                   </Button>
                 )}
               </div>
 
-              {/* Hidden Canvas for Thumbnail Generation */}
               {currentThumbnailModel && (
                 <div className="fixed top-0 left-0 opacity-0 pointer-events-none w-[256px] h-[256px]">
                    <Canvas gl={{ preserveDrawingBuffer: true }} camera={{ position: [2, 2, 2], fov: 65 }}>
@@ -469,9 +849,9 @@ const Settings = () => {
               )}
 
               {auditIssues.length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-secondary">
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm text-[var(--txt-primary)]">
+                    <thead className="bg-[var(--bg-tertiary)]">
                       <tr>
                         <th className="p-3 text-left">Namespace</th>
                         <th className="p-3 text-left">Model</th>
@@ -480,7 +860,7 @@ const Settings = () => {
                     </thead>
                     <tbody>
                       {auditIssues.map((issue, idx) => (
-                        <tr key={idx} className="border-t border-card">
+                        <tr key={idx} className="border-t border-border bg-[var(--bg-secondary)]">
                           <td className="p-3">{issue.namespace}</td>
                           <td className="p-3">{issue.model_identifier}</td>
                           <td className="p-3 text-red-500">{issue.issue}</td>
@@ -494,50 +874,61 @@ const Settings = () => {
               )}
             </div>
           </div>
-
-          {/* Tag Management (Visible to all) */}
+        );
+      case 'users':
+        return (
           <div className="space-y-4">
-            <h2 className="text-2xl font-semibold">Tag Management</h2>
-            <div className="bg-card border border-card rounded-lg p-6 space-y-6">
-              <form onSubmit={handleCreateTag} className="flex gap-4 items-end">
-                <TextField className="flex-1">
-                  <Label>Tag Name</Label>
-                  <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} required />
-                </TextField>
-                <TextField className="w-32">
-                  <Label>Color</Label>
-                  <Input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="h-10 p-1" />
-                </TextField>
-                <TextField className="flex-1">
-                  <Label>Group (Optional)</Label>
-                  <Input value={newTagGroup} onChange={(e) => setNewTagGroup(e.target.value)} />
-                </TextField>
-                <Button type="submit">Add Tag</Button>
-              </form>
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-semibold flex items-center gap-2"><User className="h-6 w-6" /> User Management</h2>
+              <Button onPress={() => setNewUserOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> Add User
+              </Button>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {tags.map((tag, index) => {
-                  const tagId = typeof tag === 'object' ? tag.id : tag;
-                  const tagName = typeof tag === 'object' ? tag.tag : tag;
-                  const tagColor = typeof tag === 'object' ? tag.color : '#808080';
-
-                  return (
-                      <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-background">
-                        <div className="flex items-center gap-2">
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: tagColor }}></div>
-                          <span>{tagName}</span>
-                        </div>
-                        <Button size="sm" variant="ghost" color="danger" onPress={() => handleDeleteTag(tagId)}>
-                          <Trash2 className="h-4 w-4" />
+            <div className="border border-border rounded-lg overflow-x-auto bg-[var(--bg-secondary)]">
+              <table className="w-full text-sm text-[var(--txt-primary)]">
+                <thead className="bg-[var(--bg-tertiary)]">
+                <tr>
+                  <th className="p-4 text-left font-semibold">Username</th>
+                  <th className="p-4 text-left font-semibold">Role</th>
+                  <th className="p-4 text-right font-semibold">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                {users.map((u) => (
+                    <tr key={u.id} className="border-b border-border">
+                      <td className="p-4 font-medium">{u.username}</td>
+                      <td className="p-4">
+                        <Select className="w-32" defaultValue={u.role} onChange={(key) => handleUpdateRole(u.id, key)} isDisabled={u.id === user?.id}>
+                          <Select.Trigger className="select__trigger w-32 justify-between">
+                            <Select.Value className="select__value" />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              <ListBox.Item id="normal" textValue="normal">Normal</ListBox.Item>
+                              <ListBox.Item id="admin" textValue="admin">Admin</ListBox.Item>
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
+                      </td>
+                      <td className="p-4 text-right flex justify-end gap-2">
+                        <Button size="sm" variant="outline" onPress={() => handleOpenEditUser(u)} isDisabled={u.id === user?.id}>
+                          Edit
                         </Button>
-                      </div>
-                  );
-                })}
-              </div>
+                        <Button variant="ghost" size="icon" color="danger" onPress={() => handleDeleteUser(u.id)} isDisabled={u.id === user?.id}>
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </td>
+                    </tr>
+                ))}
+                </tbody>
+              </table>
             </div>
           </div>
-
-          {/* Server Management */}
+        );
+      case 'servers':
+        return (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold flex items-center gap-2">
@@ -548,31 +939,33 @@ const Settings = () => {
                 Refresh Status
               </Button>
             </div>
-            <div className="bg-card border border-card rounded-lg p-6 space-y-6">
+            <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-6">
               {isAdmin && (
-                <form onSubmit={handleAddServer} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                  <TextField className="md:col-span-1">
+                <form onSubmit={handleAddServer} className="grid grid-cols-4 gap-4 items-end">
+                  <TextField>
                     <Label>Server Name</Label>
                     <Input value={newServerName} onChange={(e) => setNewServerName(e.target.value)} required />
                   </TextField>
-                  <TextField className="md:col-span-1">
+                  <TextField>
                     <Label>Server URL</Label>
                     <Input value={newServerUrl} onChange={(e) => setNewServerUrl(e.target.value)} required placeholder="http://ip:port" />
                   </TextField>
-                  <TextField className="md:col-span-1">
+                  <TextField>
                     <Label>API Key</Label>
                     <Input value={newServerApiKey} onChange={(e) => setNewServerApiKey(e.target.value)} required />
                   </TextField>
-                  <Button type="submit" className="self-end h-10">Add Server</Button>
+                  <div className="flex items-end">
+                    <Button type="submit" className="h-10 w-full">Add Server</Button>
+                  </div>
                 </form>
               )}
 
               <div className="space-y-4">
                 {servers.map(server => (
-                  <div key={server.id} className="flex items-center justify-between p-3 border rounded-lg bg-(--secondary)">
+                  <div key={server.id} className="flex items-center justify-between p-3 border border-border rounded-lg bg-(--bg-tertiary)">
                     <div>
-                      <p className="font-medium">{server.name}</p>
-                      <p className="text-sm text-(--text-secondary)">{server.url}</p>
+                      <p className="font-medium text-(--txt-primary)">{server.name}</p>
+                      <p className="text-sm text-(--txt-secondary)">{server.url}</p>
                     </div>
                     <div className="flex items-center gap-4">
                       <StatusIndicator connected={server.connected} />
@@ -587,139 +980,318 @@ const Settings = () => {
               </div>
             </div>
           </div>
+        );
+      default:
+        return null;
+    }
+  };
 
-          {/* User Management (Admin Only) */}
-          {isAdmin && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-2xl font-semibold">User Management</h2>
-                  <Button onPress={() => setNewUserOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" /> Add User
-                  </Button>
-                </div>
+  return (
+    <div className={`min-h-screen bg-[var(--bg-primary)] text-[var(--txt-primary)] transition-colors ${isDark ? 'dark' : ''}`}>
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex items-center gap-4 mb-8">
+          <Button variant="ghost" size="icon" onPress={() => navigate('/')}>
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+          <h1 className="text-3xl font-bold">Settings</h1>
+        </div>
 
-                <div className="border border-card rounded-lg overflow-x-auto">
-                  <table className="w-full text-sm bg-(--card)">
-                    <thead className="bg-(--secondary)">
-                    <tr>
-                      <th className="p-4 text-left font-semibold">Username</th>
-                      <th className="p-4 text-left font-semibold">Role</th>
-                      <th className="p-4 text-right font-semibold">Actions</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {users.map((u) => (
-                        <tr key={u.id} className="border-b border-card">
-                          <td className="p-4 font-medium">{u.username}</td>
-                          <td className="p-4">
-                            <Dropdown>
-                              <Dropdown.Trigger asChild>
-                                <div className="hover:bg-muted-hover-hover bg-muted text-primary w-32 justify-between flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
-                                  {u.role}
-                                </div>
-                              </Dropdown.Trigger>
-                              <Dropdown.Popover>
-                                <Dropdown.Menu onAction={(key) => handleUpdateRole(u.id, key)}>
-                                  <Dropdown.Item id="normal">Normal</Dropdown.Item>
-                                  <Dropdown.Item id="admin">Admin</Dropdown.Item>
-                                </Dropdown.Menu>
-                              </Dropdown.Popover>
-                            </Dropdown>
-                          </td>
-                          <td className="p-4 text-right">
-                            <Button variant="ghost" size="icon" onPress={() => handleDeleteUser(u.id)} isDisabled={u.id === user?.id}>
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </td>
-                        </tr>
-                    ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-          )}
+        <div className="flex gap-8">
+          {/* Left Nav */}
+          <aside className="w-1/5">
+            <nav className="flex flex-col space-y-2">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-3 px-4 py-2 rounded-lg text-left transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-[var(--bg-tertiary)] text-[var(--txt-primary)] font-semibold'
+                      : 'hover:bg-[var(--bg-secondary)] text-[var(--txt-secondary)]'
+                  }`}
+                >
+                  <tab.icon className="h-5 w-5" />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-          {/* Modals */}
-          <Modal isOpen={newUserOpen} onOpenChange={setNewUserOpen}>
-            <Modal.Backdrop>
-              <Modal.Container>
-                <Modal.Dialog>
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading>Create New User</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form onSubmit={handleCreateUser} className="space-y-4">
-                      <TextField>
-                        <Label>Username</Label>
-                        <Input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required />
-                      </TextField>
-                      <TextField>
-                        <Label>Password</Label>
-                        <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
-                      </TextField>
-                      <div className="space-y-2">
-                        <Label>Role</Label>
-                        <Dropdown>
-                          <Dropdown.Trigger asChild>
-                            <div className="hover:bg-muted-hover-hover bg-muted text-primary w-full justify-between flex items-center px-3 py-2 rounded-lg border border-default cursor-pointer">
-                              {newRole}
-                            </div>
-                          </Dropdown.Trigger>
-                          <Dropdown.Popover>
-                            <Dropdown.Menu onAction={setNewRole}>
-                              <Dropdown.Item id="normal">Normal</Dropdown.Item>
-                              <Dropdown.Item id="admin">Admin</Dropdown.Item>
-                            </Dropdown.Menu>
-                          </Dropdown.Popover>
-                        </Dropdown>
-                      </div>
-                      <Button type="submit" className="w-full">Create User</Button>
-                    </form>
-                  </Modal.Body>
-                </Modal.Dialog>
-              </Modal.Container>
-            </Modal.Backdrop>
-          </Modal>
-
-          <Modal isOpen={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
-            <Modal.Backdrop>
-              <Modal.Container>
-                <Modal.Dialog className="bg-(--card)">
-                  <Modal.CloseTrigger />
-                  <Modal.Header>
-                    <Modal.Heading>Update Profile</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <form onSubmit={handleUpdateProfile} className="space-y-4">
-                      <TextField>
-                        <Label>New Username</Label>
-                        <Input className="bg-(--secondary)" value={newSelfUsername} onChange={(e) => setNewSelfUsername(e.target.value)} required />
-                      </TextField>
-                      <TextField>
-                        <Label>Current Password <span className="text-red-500">*</span></Label>
-                        <Input className="bg-(--secondary)" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
-                      </TextField>
-                      <TextField>
-                        <Label>New Password</Label>
-                        <Input 
-                          type="password" 
-                          value={newSelfPassword} 
-                          onChange={(e) => setNewSelfPassword(e.target.value)} 
-                          placeholder="Leave blank to keep current" 
-                          className="placeholder:text-(--text-secondary) bg-(--secondary)"
-                        />
-                      </TextField>
-                      <Button type="submit" className="w-full">Update Profile</Button>
-                    </form>
-                  </Modal.Body>
-                </Modal.Dialog>
-              </Modal.Container>
-            </Modal.Backdrop>
-          </Modal>
+          {/* Right Content */}
+          <main className="w-4/5">
+            {renderContent()}
+          </main>
         </div>
       </div>
+
+      {/* Modals */}
+      <Modal isOpen={newUserOpen} onOpenChange={setNewUserOpen}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>Create New User</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <form onSubmit={handleCreateUser} className="space-y-4">
+                  <TextField>
+                    <Label>Username</Label>
+                    <Input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required />
+                  </TextField>
+                  <TextField>
+                    <Label>Password</Label>
+                    <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                  </TextField>
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Dropdown>
+                      <Dropdown.Trigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          {newRole}
+                        </Button>
+                      </Dropdown.Trigger>
+                      <Dropdown.Popover>
+                        <Dropdown.Menu onAction={setNewRole}>
+                          <Dropdown.Item id="normal">Normal</Dropdown.Item>
+                          <Dropdown.Item id="admin">Admin</Dropdown.Item>
+                        </Dropdown.Menu>
+                      </Dropdown.Popover>
+                    </Dropdown>
+                  </div>
+                  <Button type="submit" className="w-full">Create User</Button>
+                </form>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal isOpen={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>Update Profile</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className="p-1">
+                <form onSubmit={handleUpdateProfile} className="space-y-4">
+                  <TextField>
+                    <Label>New Username</Label>
+                    <Input value={newSelfUsername} onChange={(e) => setNewSelfUsername(e.target.value)} required />
+                  </TextField>
+                  <TextField>
+                    <Label>Current Password <span className="text-red-500">*</span></Label>
+                    <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                  </TextField>
+                  <TextField>
+                    <Label>New Password</Label>
+                    <Input 
+                      type="password" 
+                      value={newSelfPassword} 
+                      onChange={(e) => setNewSelfPassword(e.target.value)} 
+                      placeholder="Leave blank to keep current" 
+                    />
+                  </TextField>
+                  <Button type="submit" className="w-full">Update Profile</Button>
+                </form>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      {/* Admin: Edit user modal */}
+      <Modal isOpen={editUserOpen} onOpenChange={setEditUserOpen}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>Edit User</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <form onSubmit={handleSaveUser} className="space-y-4">
+                  <TextField>
+                    <Label>Username</Label>
+                    <Input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} required />
+                  </TextField>
+
+                  <TextField>
+                    <Label>New Password (leave blank to keep current)</Label>
+                    <Input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} placeholder="New password" />
+                  </TextField>
+
+                  <div>
+                    <Label className="block mb-2">Role</Label>
+                    <Select className="w-full" defaultValue={editRole} onChange={(key) => setEditRole(key)}>
+                      <Select.Trigger className="select__trigger w-full">
+                        <Select.Value className="select__value" />
+                        <Select.Indicator />
+                      </Select.Trigger>
+                      <Select.Popover>
+                        <ListBox>
+                          <ListBox.Item id="normal" textValue="normal">Normal</ListBox.Item>
+                          <ListBox.Item id="admin" textValue="admin">Admin</ListBox.Item>
+                        </ListBox>
+                      </Select.Popover>
+                    </Select>
+                  </div>
+
+                  <Button type="submit" className="w-full">Save</Button>
+                </form>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    </div>
   );
 };
 
+/**
+ * Los het probleem met hooks op door een eigen component te maken voor tag management.
+ */
+function TagManagement({
+  tags,
+  groupedTags,
+  handleCreateTag,
+  newTag,
+  setNewTag,
+  newTagColor,
+  setNewTagColor,
+  newTagGroup,
+  setNewTagGroup,
+  handleDeleteTag,
+  fetchTags,
+}) {
+  const [editTagModalOpen, setEditTagModalOpen] = useState(false);
+  const [tagToEdit, setTagToEdit] = useState(null);
+  const [editTagName, setEditTagName] = useState('');
+  const [editTagColor, setEditTagColor] = useState('#000000');
+  const [editTagGroup, setEditTagGroup] = useState('');
+
+  // Handler voor tag bewerken
+  const handleEditTag = (tag) => {
+    setTagToEdit(tag);
+    setEditTagName(tag.tag);
+    setEditTagColor(tag.color || '#000000');
+    setEditTagGroup(tag.group || '');
+    setEditTagModalOpen(true);
+  };
+
+  const handleUpdateTag = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`/api/tags/${tagToEdit.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          tag: editTagName,
+          color: editTagColor,
+          group: editTagGroup,
+        }),
+      });
+      if (response.ok) {
+        toast.success("Tag bijgewerkt");
+        setEditTagModalOpen(false);
+        setTagToEdit(null);
+        await fetchTags();
+      } else {
+        const data = await response.json();
+        toast.danger(data.error || "Bijwerken mislukt");
+      }
+    } catch (error) {
+      toast.danger("Er is een fout opgetreden");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-semibold flex items-center gap-2">
+        <Tags className="h-6 w-6" /> Tag Management
+      </h2>
+      <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-6">
+        <form onSubmit={handleCreateTag} className="flex gap-4 items-end flex-nowrap w-full">
+          <TextField className="flex-1 min-w-0">
+            <Label>Tag Name</Label>
+            <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} required />
+          </TextField>
+          <TextField className="w-28 flex-shrink-0">
+            <Label>Color</Label>
+            <Input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="h-10 p-1" />
+          </TextField>
+          <TextField className="flex-1 min-w-0">
+            <Label>Group (Optional)</Label>
+            <Input value={newTagGroup} onChange={(e) => setNewTagGroup(e.target.value)} />
+          </TextField>
+          <Button type="submit" className="h-10 w-32 flex-shrink-0">Add Tag</Button>
+        </form>
+
+        <div className="space-y-6">
+          {Object.entries(groupedTags).map(([group, groupTags]) => (
+            <div key={group}>
+              <div className="font-semibold text-[var(--txt-secondary)] mb-2">{group}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {groupTags.map((tag, index) => (
+                  <div key={tag.id || index} className="flex items-center justify-between p-3 border rounded-lg bg-[var(--bg-primary)]">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: tag.color || '#808080' }}></div>
+                      <span className="text-[var(--txt-primary)]">{tag.tag}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="ghost" color="primary" onPress={() => handleEditTag(tag)}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-2.828 1.172H7v-2a4 4 0 011.172-2.828z" />
+                        </svg>
+                      </Button>
+                      <Button size="sm" variant="ghost" color="danger" onPress={() => handleDeleteTag(tag.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal voor tag bewerken */}
+      <Modal isOpen={editTagModalOpen} onOpenChange={setEditTagModalOpen}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>Bewerk Tag</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <form onSubmit={handleUpdateTag} className="space-y-4">
+                  <TextField>
+                    <Label>Tag Naam</Label>
+                    <Input value={editTagName} onChange={e => setEditTagName(e.target.value)} required />
+                  </TextField>
+                  <TextField>
+                    <Label>Kleur</Label>
+                    <Input type="color" value={editTagColor} onChange={e => setEditTagColor(e.target.value)} className="h-10 p-1" />
+                  </TextField>
+                  <TextField>
+                    <Label>Groep (optioneel)</Label>
+                    <Input value={editTagGroup} onChange={e => setEditTagGroup(e.target.value)} />
+                  </TextField>
+                  <Button type="submit" className="w-full">Opslaan</Button>
+                </form>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    </div>
+  );
+}
+
 export default Settings;
+export { Settings };

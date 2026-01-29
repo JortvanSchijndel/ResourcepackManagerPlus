@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TopBar } from '../components/layout/TopBar';
-import { Toast } from '../components/layout/Toast';
-import { Toolbar } from '../components/common/Toolbar';
-import { ModelGrid } from '../components/models/ModelGrid';
+import { Toolbar } from '../components/layout/Toolbar';
+import { ModelGrid } from '../components/3d/ModelGrid';
 import { UploadModal } from '../components/modals/UploadModal';
-import { EditModal } from '../components/modals/EditModal';
+import { EditModelModal } from '../components/modals/EditModelModal';
 import { CopyMoveModal } from '../components/modals/CopyMoveModal';
 import { NewBranchModal } from '../components/modals/NewBranchModal';
 import { MergeModal } from '../components/modals/MergeModal';
@@ -12,14 +11,13 @@ import { PushToServerModal } from '../components/modals/PushToServerModal';
 import { RawEditor } from './RawEditor';
 import { useBranches } from '../hooks/useBranches';
 import { useModels } from '../hooks/useModels';
-import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { Toast, toast } from '@heroui/react';
 
 export const Dashboard = () => {
-  const { message, showMessage } = useToast();
-  const { logout, isDark, setIsDark, branch, setBranch } = useAuth();
+  const { logout, isDark, branch, setBranch } = useAuth();
   const navigate = useNavigate();
   
   const {
@@ -32,19 +30,19 @@ export const Dashboard = () => {
     mergeBranches,
   } = useBranches();
 
-  // Sync branch state with useAuth
   useEffect(() => {
     if (currentBranch !== branch) {
       setBranch(currentBranch);
     }
-  }, [currentBranch, branch, setBranch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBranch]);
 
-  // If branch changes in settings (via useAuth), update local state
   useEffect(() => {
     if (branch && branch !== currentBranch) {
       setCurrentBranch(branch);
     }
-  }, [branch, currentBranch, setCurrentBranch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branch]);
 
   const {
     models,
@@ -83,91 +81,91 @@ export const Dashboard = () => {
         setServers(serversRes.servers || []);
       } catch (error) {
         console.error('Error fetching initial data:', error);
-        showMessage('Could not load tags or servers.', 'error');
+        toast.danger('Could not load tags or servers.');
       }
     };
     fetchInitialData();
   }, []);
 
-  const handleUpload = async (formData) => {
+  const handleUpload = useCallback(async (formData) => {
     const result = await uploadModel(formData);
     if (result.success) {
-      showMessage(result.message);
+      toast.success(result.message);
       setShowUpload(false);
     } else {
-      showMessage(result.message, 'error');
+      toast.danger(result.message);
     }
-  };
+  }, [uploadModel]);
 
-  const handleEdit = async (formData) => {
+  const handleEdit = useCallback(async (formData) => {
     const result = await updateModel(
       selectedModel.namespace,
       selectedModel.model_identifier,
       formData
     );
     if (result.success) {
-      showMessage(result.message);
+      toast.success(result.message);
       setShowEdit(false);
       setSelectedModel(null); 
     } else {
-      showMessage(result.message, 'error');
+      toast.danger(result.message);
     }
-  };
+  }, [updateModel, selectedModel]);
 
-  const handleDelete = async (model) => {
+  const handleDelete = useCallback(async (model) => {
     if (!window.confirm(`Delete model "${model.name}"?`)) return;
     const result = await deleteModel(model);
     if (result.success) {
-      showMessage(result.message);
+      toast.success(result.message);
     } else {
-      showMessage(result.message, 'error');
+      toast.danger(result.message);
     }
-  };
+  }, [deleteModel]);
 
-  const handleCopyMove = async (data) => {
+  const handleCopyMove = useCallback(async (data) => {
     const result = await copyModel(data);
     if (result.success) {
-      showMessage(result.message);
+      toast.success(result.message);
       setShowCopyMove(false);
     } else {
-      showMessage(result.message, 'error');
+      toast.danger(result.message);
     }
-  };
+  }, [copyModel]);
 
-  const handleCreateBranch = async (name, copyFrom) => {
+  const handleCreateBranch = useCallback(async (name, copyFrom) => {
     const result = await createBranch(name, copyFrom);
     if (result.success) {
-      showMessage(result.message);
+      toast.success(result.message);
       setShowNewBranch(false);
     } else {
-      showMessage(result.message, 'error');
+      toast.danger(result.message);
     }
-  };
+  }, [createBranch]);
 
-  const handleDeleteBranch = async (branch) => {
+  const handleDeleteBranch = useCallback(async (branch) => {
     if (!window.confirm(`Delete branch "${branch}"?`)) return;
     const result = await deleteBranch(branch);
     if (result.success) {
-      showMessage(result.message);
+      toast.success(result.message);
     } else {
-      showMessage(result.message, 'error');
+      toast.danger(result.message);
     }
-  };
+  }, [deleteBranch]);
 
-  const handleMerge = async (source, target, operations) => {
+  const handleMerge = useCallback(async (source, target, operations) => {
     const result = await mergeBranches(source, target, operations);
     if (result.success) {
-      showMessage(result.message);
+      toast.success(result.message);
       setShowMerge(false);
     } else {
-      showMessage(result.message, 'error');
+      toast.danger(result.message);
     }
-  };
+  }, [mergeBranches]);
   
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await logout();
     navigate('/login');
-  };
+  }, [logout, navigate]);
 
   const filteredModels = models.filter((model) => {
     const query = searchQuery.toLowerCase();
@@ -191,27 +189,22 @@ export const Dashboard = () => {
 
   if (showRawEditor) {
     return (
-      <div className={isDark ? 'dark' : ''}>
-        <RawEditor 
-          onBack={() => setShowRawEditor(false)} 
-          currentBranch={currentBranch}
-          isDark={isDark}
-        />
-      </div>
+      <RawEditor 
+        onBack={() => setShowRawEditor(false)} 
+        currentBranch={currentBranch}
+      />
     );
   }
 
 return (
   <div className={isDark ? 'dark' : ''}>
-    <div className="min-h-screen bg-background text-foreground transition-colors">
+    <div className="min-h-screen transition-colors">
       <TopBar
         branches={branches}
         currentBranch={currentBranch}
         onBranchChange={setCurrentBranch}
         onNewBranch={() => setShowNewBranch(true)}
         onDeleteBranch={handleDeleteBranch}
-        isDark={isDark}
-        onToggleTheme={() => setIsDark(!isDark)}
         onLogout={handleLogout}
       />
 
@@ -260,7 +253,7 @@ return (
         existingModels={models}
       />
 
-      <EditModal
+      <EditModelModal
         show={showEdit}
         model={selectedModel}
         categories={uniqueCategories}
@@ -294,13 +287,7 @@ return (
         loading={branchLoading}
       />
 
-      <MergeModal
-        show={showMerge}
-        branches={branches}
-        onClose={() => setShowMerge(false)}
-        onSubmit={handleMerge}
-        loading={branchLoading}
-      />
+
 
       <PushToServerModal
         show={showPushToServer}
@@ -309,7 +296,15 @@ return (
         currentBranch={currentBranch}
       />
 
-      <Toast message={message} />
+      <MergeModal
+        show={showMerge}
+        branches={branches}
+        onClose={() => setShowMerge(false)}
+        onSubmit={handleMerge}
+        loading={branchLoading}
+      />
+
+      <Toast.Container />
     </div>
   </div>
 );

@@ -36,6 +36,12 @@ CONFIG_FILE = BASE_DIR / "config.yaml"
 USERS_FILE = BASE_DIR / "users.yaml"
 SERVERS_FILE = BASE_DIR / "servers.yaml"
 
+# Branding storage
+BRANDING_DIR = BASE_DIR / "branding"
+BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+BRAND_ICON_PATH = BRANDING_DIR / "icon.png"
+BRAND_DEFAULT = "oklch(0.58 0.256 293.597)"
+
 # Ensure directories exist
 BRANCHES_DIR.mkdir(exist_ok=True)
 TEMP_DIR.mkdir(exist_ok=True)
@@ -408,26 +414,43 @@ def update_user_role(user_id):
     if current_user.role != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
 
-    data = request.json
+    data = request.json or {}
     role = data.get('role')
+    new_username = data.get('username')
+    new_password = data.get('password')
 
-    if role not in ['admin', 'normal']:
+    # Validate role if provided
+    if role is not None and role not in ['admin', 'normal']:
         return jsonify({"error": "Invalid role"}), 400
 
     users_data = load_users()
     users = users_data.get("users", [])
 
     updated = False
-    for u in users:
+    for i, u in enumerate(users):
         if u["id"] == user_id:
-            u["role"] = role
+            # Update username if provided (and not taken)
+            if new_username and new_username != u.get("username"):
+                for other in users:
+                    if other.get("username") == new_username and other.get("id") != user_id:
+                        return jsonify({"error": "Username already exists"}), 400
+                users[i]["username"] = new_username
+
+            # Update password if provided (only when non-empty)
+            if new_password:
+                users[i]["password"] = generate_password_hash(new_password)
+
+            # Update role if provided
+            if role is not None:
+                users[i]["role"] = role
+
             updated = True
             break
 
     if updated:
+        users_data["users"] = users
         save_users(users_data)
-        return jsonify({"success": True})
-
+        return jsonify({"success": True, "user": {"id": user_id, "username": users[i]["username"], "role": users[i]["role"]}})
     return jsonify({"error": "User not found"}), 404
 
 
@@ -1518,6 +1541,188 @@ def delete_tag():
                 continue
 
     return jsonify({"success": True, "message": "Tag deleted and references removed", "tags": tags})
+
+
+@app.route('/api/tags/<tag_id>', methods=['PUT', 'OPTIONS'])
+@login_required
+def update_tag(tag_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    tag_data = request.get_json()
+
+    if not tag_data:
+        return jsonify({"error": "Tag data required"}), 400
+
+    new_tag_name = tag_data.get("tag")
+    new_tag_color = tag_data.get("color")
+    new_tag_group = tag_data.get("group")
+
+    if not new_tag_name or not new_tag_color:
+        return jsonify({"error": "Tag name and color are required"}), 400
+
+    config = load_config()
+    tags = config.get("tags", [])
+
+    updated = False
+    for i, t in enumerate(tags):
+        if isinstance(t, dict) and t.get("id") == tag_id:
+            # Check if new tag name already exists for a different tag
+            for other_tag in tags:
+                if other_tag.get("id") != tag_id and other_tag.get("tag", "").lower() == new_tag_name.lower():
+                    return jsonify({"error": "Tag name already exists for another tag"}), 400
+
+            tags[i]["tag"] = new_tag_name
+            tags[i]["color"] = new_tag_color
+            tags[i]["group"] = new_tag_group if new_tag_group else None
+            updated = True
+            break
+
+    if not updated:
+        return jsonify({"error": "Tag not found"}), 404
+
+    config["tags"] = tags
+    save_config(config)
+
+    return jsonify({"success": True, "message": "Tag updated successfully", "tags": tags})
+
+
+@app.route('/api/tag-groups/<old_group_name>', methods=['PUT', 'OPTIONS'])
+@login_required
+def rename_tag_group(old_group_name):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json()
+    new_group_name = data.get('new_group_name')
+
+    if not new_group_name:
+        return jsonify({"error": "New group name required"}), 400
+
+    config = load_config()
+    tags = config.get("tags", [])
+
+    updated_count = 0
+    for tag in tags:
+        if isinstance(tag, dict) and tag.get("group") == old_group_name:
+            tag["group"] = new_group_name
+            updated_count += 1
+
+    if updated_count == 0:
+        return jsonify({"error": "No tags found with that group name"}), 404
+
+    config["tags"] = tags
+    save_config(config)
+
+    # Return the updated list of tags to allow frontend to refresh its state
+    return jsonify({"success": True, "message": f"{updated_count} tags updated. Group '{old_group_name}' renamed to '{new_group_name}'", "tags": tags})
+
+
+# Branding endpoints
+def get_png_size(data: bytes):
+    """
+    Read PNG image bytes and return (width, height) without external deps.
+    Returns None on invalid PNG.
+    """
+    try:
+        if data[:8] != b'\x89PNG\r\n\x1a\n':
+            return None
+        # IHDR chunk begins at offset 8: 4 bytes length, 4 bytes 'IHDR', then width(4) height(4)
+        # width at bytes 16:20, height at 20:24
+        width = int.from_bytes(data[16:20], 'big')
+        height = int.from_bytes(data[20:24], 'big')
+        return width, height
+    except Exception:
+        return None
+
+
+@app.route('/api/branding', methods=['GET'])
+@login_required
+def get_branding():
+    config = load_config()
+    branding = config.get("branding", {})
+    brand = branding.get("brand", BRAND_DEFAULT)
+    name = branding.get("name", "")
+    icon_exists = BRAND_ICON_PATH.exists()
+    icon_url = f"/api/branding/icon" if icon_exists else None
+    return jsonify({"brand": brand, "name": name, "icon": bool(icon_exists), "icon_url": icon_url})
+
+
+@app.route('/api/branding/color', methods=['POST'])
+@login_required
+def set_brand_color():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json() or {}
+    brand = data.get('brand')
+    if not brand:
+        return jsonify({"error": "Brand color required"}), 400
+
+    config = load_config()
+    config['branding'] = config.get('branding', {})
+    config['branding']['brand'] = brand
+    save_config(config)
+
+    return jsonify({"success": True, "brand": brand})
+
+
+@app.route('/api/branding/name', methods=['POST'])
+@login_required
+def set_brand_name():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json() or {}
+    name = data.get('name')
+    if name is None:
+        return jsonify({"error": "Brand name required"}), 400
+
+    config = load_config()
+    config['branding'] = config.get('branding', {})
+    config['branding']['name'] = name
+    save_config(config)
+
+    return jsonify({"success": True, "name": name})
+
+
+@app.route('/api/branding/icon', methods=['POST'])
+@login_required
+def upload_brand_icon():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    icon_file = request.files.get('icon')
+    if not icon_file:
+        return jsonify({"error": "Icon file required"}), 400
+
+    try:
+        data = icon_file.read()
+        size = get_png_size(data)
+        if not size:
+            return jsonify({"error": "Invalid PNG file"}), 400
+        w, h = size
+        if w != 256 or h != 256:
+            return jsonify({"error": "Icon must be 256x256 PNG"}), 400
+
+        with open(BRAND_ICON_PATH, 'wb') as f:
+            f.write(data)
+
+        return jsonify({"success": True})
+    except Exception as e:
+        logging.error(f"Failed to save branding icon: {e}")
+        return jsonify({"error": "Failed to save icon"}), 500
+
+
+@app.route('/api/branding/icon', methods=['GET'])
+@login_required
+def get_brand_icon():
+    if not BRAND_ICON_PATH.exists():
+        return jsonify({"error": "Icon not found"}), 404
+    return send_file(BRAND_ICON_PATH, mimetype='image/png')
 
 
 @app.route('/api/texture/<branch_name>/<namespace>/<model_identifier>/<path:texture_path>', methods=['GET'])

@@ -1,20 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
-import { Button } from '@heroui/react';
-import { ArrowLeft, Save, FolderPlus, FilePlus, Trash2, ChevronRight, ChevronDown, File, Folder, Edit2 } from 'lucide-react';
-import { useToast } from '../hooks/useToast';
-import { Toast } from '../components/layout/Toast';
+import { 
+    Button, 
+    Modal, 
+    Input,
+    AlertDialog,
+    toast,
+    Toast
+} from '@heroui/react';
+import { ArrowLeft, Save, FolderPlus, FilePlus, Trash2, ChevronRight, ChevronDown, File, Folder, Edit2, MoreHorizontal } from 'lucide-react';
 import { api } from '../services/api';
+import { useAuth } from '../hooks/useAuth';
 
 const FileTreeItem = ({ item, level, onSelect, selectedPath, onToggle, expandedPaths, onDelete, onDrop, onSelectFolder, selectedFolder, onDragStart, onRename }) => {
     const isExpanded = expandedPaths.has(item.path);
     const isSelected = selectedPath === item.path;
     const isFolderSelected = selectedFolder === item.path;
     const paddingLeft = `${level * 1.5}rem`;
+    const [menuPosition, setMenuPosition] = useState(null);
+    const menuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setMenuPosition(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleFolderClick = (e) => {
         e.stopPropagation();
         onSelectFolder(item.path);
+    };
+
+    const handleFolderDoubleClick = (e) => {
+        e.stopPropagation();
+        onToggle(item.path);
     };
 
     const handleToggleClick = (e) => {
@@ -64,14 +88,22 @@ const FileTreeItem = ({ item, level, onSelect, selectedPath, onToggle, expandedP
         }
     };
 
+    const handleContextMenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMenuPosition({ x: e.clientX, y: e.clientY });
+    };
+
     return (
         <div>
             <div
                 className={`flex items-center py-1 px-2 cursor-pointer hover:bg-muted-hover group transition-colors ${
                     isSelected ? 'bg-primary/20 text-primary font-medium' : ''
-                } ${isFolderSelected && item.isFolder ? 'bg-accent text-accent-foreground' : ''}`}
+                } ${isFolderSelected && item.isFolder ? 'bg-(--bg-tertiary)' : ''}`}
                 style={{ paddingLeft }}
                 onClick={item.isFolder ? handleFolderClick : handleFileClick}
+                onDoubleClick={item.isFolder ? handleFolderDoubleClick : undefined}
+                onContextMenu={handleContextMenu}
                 draggable={true}
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
@@ -92,30 +124,37 @@ const FileTreeItem = ({ item, level, onSelect, selectedPath, onToggle, expandedP
           {item.isFolder ? <Folder size={16} /> : <File size={16} />}
         </span>
                 <span className={`truncate flex-1 text-sm ${isSelected ? 'text-primary' : ''}`}>{item.name}</span>
+            </div>
 
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+            {menuPosition && (
+                <div
+                    ref={menuRef}
+                    className="fixed z-50 bg-card border border-card shadow-lg rounded-lg py-1 min-w-[120px] bg-transparent backdrop-blur-(--blur)"
+                    style={{ left: menuPosition.x, top: menuPosition.y }}
+                >
                     <button
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted-hover flex items-center gap-2 hover:bg-(--bg-transparent-hover)"
                         onClick={(e) => {
                             e.stopPropagation();
                             onRename(item.path);
+                            setMenuPosition(null);
                         }}
-                        className="p-1 hover:bg-primary/20 hover:text-primary rounded transition-all"
-                        title="Rename"
                     >
-                        <Edit2 size={12} />
+                        <Edit2 size={14} /> Rename
                     </button>
                     <button
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted-hover text-danger flex items-center gap-2 hover:bg-(--bg-transparent-hover)"
                         onClick={(e) => {
                             e.stopPropagation();
                             onDelete(item.path, item.isFolder);
+                            setMenuPosition(null);
                         }}
-                        className="p-1 hover:bg-danger-soft-hover hover:text-danger rounded transition-all"
-                        title="Delete"
                     >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} /> Delete
                     </button>
                 </div>
-            </div>
+            )}
+
             {item.isFolder && isExpanded && item.children && (
                 <div>
                     {item.children.map((child) => (
@@ -148,32 +187,45 @@ const CreateModal = ({ show, type, onClose, onSubmit }) => {
         if (show) setName('');
     }, [show]);
 
-    if (!show) return null;
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSubmit(name);
+    };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-card p-6 rounded-xl w-96 shadow-xl border border-card">
-                <h3 className="text-lg font-semibold mb-4">Create New {type === 'file' ? 'File' : 'Folder'}</h3>
-                <div className="mb-6">
-                    <label className="block text-sm text-muted mb-1">Name</label>
-                    <input
-                        autoFocus
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder={`Enter ${type} name...`}
-                        className="w-full bg-background border border-default rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') onSubmit(name);
-                            if (e.key === 'Escape') onClose();
-                        }}
-                    />
-                </div>
-                <div className="flex justify-end gap-2">
-                    <Button onPress={onClose} className="bg-transparent hover:bg-muted-hover text-foreground">Cancel</Button>
-                    <Button onPress={() => onSubmit(name)} className="bg-primary hover:bg-primary-hover text-primary-foreground">Create</Button>
-                </div>
-            </div>
-        </div>
+        <AlertDialog>
+            <AlertDialog.Backdrop isOpen={show} onOpenChange={onClose}>
+                <AlertDialog.Container>
+                    <AlertDialog.Dialog>
+                        <form onSubmit={handleSubmit}>
+                            <AlertDialog.Header>
+                                <AlertDialog.Heading>Create New {type === 'file' ? 'File' : 'Folder'}</AlertDialog.Heading>
+                            </AlertDialog.Header>
+                            <AlertDialog.Body className="py-4">
+                                <div className="flex flex-col gap-2">
+                                    <label htmlFor="create-name" className="text-sm font-medium">Name</label>
+                                    <Input
+                                        id="create-name"
+                                        autoFocus
+                                        placeholder={`Enter ${type} name...`}
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                    />
+                                </div>
+                            </AlertDialog.Body>
+                            <AlertDialog.Footer>
+                                <Button variant="flat" onPress={onClose}>
+                                    Cancel
+                                </Button>
+                                <Button color="primary" type="submit">
+                                    Create
+                                </Button>
+                            </AlertDialog.Footer>
+                        </form>
+                    </AlertDialog.Dialog>
+                </AlertDialog.Container>
+            </AlertDialog.Backdrop>
+        </AlertDialog>
     );
 };
 
@@ -184,35 +236,77 @@ const RenameModal = ({ show, currentName, onClose, onSubmit }) => {
         if (show) setName(currentName);
     }, [show, currentName]);
 
-    if (!show) return null;
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSubmit(name);
+    };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-card p-6 rounded-xl w-96 shadow-xl border border-card">
-                <h3 className="text-lg font-semibold mb-4">Rename</h3>
-                <div className="mb-6">
-                    <label className="block text-sm text-muted mb-1">New Name</label>
-                    <input
-                        autoFocus
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full bg-background border border-default rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') onSubmit(name);
-                            if (e.key === 'Escape') onClose();
-                        }}
-                    />
-                </div>
-                <div className="flex justify-end gap-2">
-                    <Button onPress={onClose} className="bg-transparent hover:bg-muted-hover text-foreground">Cancel</Button>
-                    <Button onPress={() => onSubmit(name)} className="bg-primary hover:bg-primary-hover text-primary-foreground">Rename</Button>
-                </div>
-            </div>
-        </div>
+        <AlertDialog>
+            <AlertDialog.Backdrop isOpen={show} onOpenChange={onClose}>
+                <AlertDialog.Container>
+                    <AlertDialog.Dialog>
+                        <form onSubmit={handleSubmit}>
+                            <AlertDialog.Header>
+                                <AlertDialog.Heading>Rename</AlertDialog.Heading>
+                            </AlertDialog.Header>
+                            <AlertDialog.Body className="py-4">
+                                <div className="flex flex-col gap-2">
+                                    <label htmlFor="rename-name" className="text-sm font-medium">New Name</label>
+                                    <Input
+                                        id="rename-name"
+                                        autoFocus
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        className="ml-1 mr-1"
+                                    />
+                                </div>
+                            </AlertDialog.Body>
+                            <AlertDialog.Footer>
+                                <Button variant="flat" onPress={onClose}>
+                                    Cancel
+                                </Button>
+                                <Button color="primary" type="submit">
+                                    Rename
+                                </Button>
+                            </AlertDialog.Footer>
+                        </form>
+                    </AlertDialog.Dialog>
+                </AlertDialog.Container>
+            </AlertDialog.Backdrop>
+        </AlertDialog>
     );
 };
 
-export const RawEditor = ({ onBack, currentBranch, isDark }) => {
+const DeleteDialog = ({ show, path, onClose, onConfirm }) => {
+    return (
+        <AlertDialog>
+            <AlertDialog.Backdrop isOpen={show} onOpenChange={onClose}>
+                <AlertDialog.Container>
+                    <AlertDialog.Dialog>
+                        <AlertDialog.Header>
+                            <AlertDialog.Icon status="danger" />
+                            <AlertDialog.Heading>Confirm Deletion</AlertDialog.Heading>
+                        </AlertDialog.Header>
+                        <AlertDialog.Body className="py-4">
+                            Are you sure you want to delete "{path}"? This action cannot be undone.
+                        </AlertDialog.Body>
+                        <AlertDialog.Footer>
+                            <Button variant="flat" onPress={onClose}>
+                                Cancel
+                            </Button>
+                            <Button color="danger" onPress={onConfirm}>
+                                Delete
+                            </Button>
+                        </AlertDialog.Footer>
+                    </AlertDialog.Dialog>
+                </AlertDialog.Container>
+            </AlertDialog.Backdrop>
+        </AlertDialog>
+    );
+};
+
+export const RawEditor = ({ onBack, currentBranch }) => {
     const [fileTree, setFileTree] = useState([]);
     const [selectedFile, setSelectedFile] = useState(null);
     const [selectedFolder, setSelectedFolder] = useState(null);
@@ -220,13 +314,14 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
     const [expandedPaths, setExpandedPaths] = useState(new Set());
     const [sidebarWidth, setSidebarWidth] = useState(288); // 72 * 4 = 288px default
     const [isResizing, setIsResizing] = useState(false);
-    const { message, showMessage } = useToast();
+    const { isDark } = useAuth();
     const editorRef = useRef(null);
     const [, setDraggedItem] = useState(null);
 
     // Modal states
     const [createModal, setCreateModal] = useState({ show: false, type: 'file' });
     const [renameModal, setRenameModal] = useState({ show: false, currentName: '', targetPath: '' });
+    const [deleteDialog, setDeleteDialog] = useState({ show: false, path: '', isFolder: false });
 
     useEffect(() => {
         fetchFiles();
@@ -267,6 +362,14 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
             window.removeEventListener('mouseup', handleMouseUp);
         };
     }, [isResizing]);
+
+    const showToast = (title, description, variant = "default", color = "default") => {
+        toast(title, {
+            description,
+            variant,
+            timeout: 3000,
+        });
+    };
 
     const buildFileTree = (paths) => {
         const root = [];
@@ -331,7 +434,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
             setFileTree(tree);
         } catch (error) {
             console.error('Error fetching files:', error);
-            showMessage('Failed to load file list', 'error');
+            showToast('Error', 'Failed to load file list', 'danger');
         }
     };
 
@@ -342,7 +445,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
             const data = await api.getFileContent(currentBranch, path);
 
             if (data.error) {
-                showMessage(data.error, 'error');
+                showToast('Error', data.error, 'danger');
                 return;
             }
 
@@ -354,14 +457,14 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
             setSelectedFolder(parts.join('/'));
         } catch (error) {
             console.error('Error fetching file content:', error);
-            showMessage('Failed to load file content', 'error');
+            showToast('Error', 'Failed to load file content', 'danger');
         }
     };
 
     const handleFolderSelect = (path) => {
         setSelectedFolder(path);
         // Auto expand when selecting
-        setExpandedPaths(prev => new Set(prev).add(path));
+        // setExpandedPaths(prev => new Set(prev).add(path));
     };
 
     const handleToggleFolder = (path) => {
@@ -382,13 +485,13 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
         try {
             const result = await api.saveFileContent(currentBranch, selectedFile, fileContent);
             if (result.success) {
-                showMessage('File saved successfully');
+                showToast('Success', 'File saved successfully', 'success');
             } else {
-                showMessage(result.message || 'Failed to save file', 'error');
+                showToast('Error', result.message || 'Failed to save file', 'danger');
             }
         } catch (error) {
             console.error('Error saving file:', error);
-            showMessage('Failed to save file', 'error');
+            showToast('Error', 'Failed to save file', 'danger');
         }
     };
 
@@ -401,18 +504,18 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
         try {
             const result = await api.createFileOrFolder(currentBranch, fullPath, createModal.type === 'folder');
             if (result.success) {
-                showMessage(result.message);
+                showToast('Success', result.message, 'success');
                 fetchFiles();
                 if (parentPath) {
                     setExpandedPaths(prev => new Set(prev).add(parentPath));
                 }
                 setCreateModal({ ...createModal, show: false });
             } else {
-                showMessage(result.message || 'Failed to create', 'error');
+                showToast('Error', result.message || 'Failed to create', 'danger');
             }
         } catch (error) {
             console.error('Error creating:', error);
-            showMessage('Failed to create', 'error');
+            showToast('Error', 'Failed to create', 'danger');
         }
     };
 
@@ -436,7 +539,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
         try {
             const result = await api.renameFile(currentBranch, targetPath, newPath);
             if (result.success) {
-                showMessage('Renamed successfully');
+                showToast('Success', 'Renamed successfully', 'success');
                 fetchFiles();
                 if (selectedFile === targetPath) {
                     setSelectedFile(newPath);
@@ -446,21 +549,24 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                 }
                 setRenameModal({ ...renameModal, show: false });
             } else {
-                showMessage(result.message || 'Failed to rename', 'error');
+                showToast('Error', result.message || 'Failed to rename', 'danger');
             }
         } catch (error) {
             console.error('Error renaming:', error);
-            showMessage('Failed to rename', 'error');
+            showToast('Error', 'Failed to rename', 'danger');
         }
     };
 
-    const handleDelete = async (path) => {
-        if (!window.confirm(`Are you sure you want to delete ${path}?`)) return;
+    const handleDeleteClick = (path, isFolder) => {
+        setDeleteDialog({ show: true, path, isFolder });
+    };
 
+    const handleDeleteConfirm = async () => {
+        const { path } = deleteDialog;
         try {
             const result = await api.deleteFileOrFolder(currentBranch, path);
             if (result.success) {
-                showMessage('Deleted successfully');
+                showToast('Success', 'Deleted successfully', 'success');
                 if (selectedFile === path) {
                     setSelectedFile(null);
                     setFileContent('');
@@ -469,12 +575,13 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                     setSelectedFolder(null);
                 }
                 fetchFiles();
+                setDeleteDialog({ show: false, path: '', isFolder: false });
             } else {
-                showMessage(result.message || 'Failed to delete', 'error');
+                showToast('Error', result.message || 'Failed to delete', 'danger');
             }
         } catch (error) {
             console.error('Error deleting:', error);
-            showMessage('Failed to delete', 'error');
+            showToast('Error', 'Failed to delete', 'danger');
         }
     };
 
@@ -492,13 +599,13 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
         }
 
         if (successCount > 0) {
-            showMessage(`Uploaded ${successCount} files successfully`);
+            showToast('Success', `Uploaded ${successCount} files successfully`, 'success');
             fetchFiles();
             if (path) {
                 setExpandedPaths(prev => new Set(prev).add(path));
             }
         } else {
-            showMessage('Failed to upload files', 'error');
+            showToast('Error', 'Failed to upload files', 'danger');
         }
     };
 
@@ -513,7 +620,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
         try {
             const result = await api.renameFile(currentBranch, sourcePath, newPath);
             if (result.success) {
-                showMessage('Moved successfully');
+                showToast('Success', 'Moved successfully', 'success');
                 fetchFiles();
                 if (selectedFile === sourcePath) {
                     setSelectedFile(newPath);
@@ -522,11 +629,11 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                     setExpandedPaths(prev => new Set(prev).add(targetFolder));
                 }
             } else {
-                showMessage(result.message || 'Failed to move', 'error');
+                showToast('Error', result.message || 'Failed to move', 'danger');
             }
         } catch (error) {
             console.error('Error moving:', error);
-            showMessage('Failed to move', 'error');
+            showToast('Error', 'Failed to move', 'danger');
         }
     };
 
@@ -540,6 +647,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
 
     return (
         <div className="h-screen flex flex-col bg-background text-foreground">
+            <Toast.Container />
             <div className="bg-card border-b border-card px-4 py-3 flex justify-between items-center">
                 <div className="flex items-center gap-4">
                     <Button onPress={onBack} className="bg-transparent hover:bg-muted-hover text-foreground p-2 rounded-full">
@@ -549,7 +657,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                         <h1 className="text-lg font-semibold">Raw Editor</h1>
                         {selectedFile && (
                             <div
-                                className="flex items-center gap-2 px-3 py-1 bg-accent rounded-full text-sm cursor-pointer hover:bg-accent/80 transition-colors"
+                                className="flex items-center gap-2 px-3 py-1 bg-(--bg-secondary) hover:bg-(--bg-tertiary) rounded-(--other-radius) text-sm cursor-pointer transition-colors"
                                 onClick={() => handleRenameClick(selectedFile)}
                             >
                                 <span className="text-muted-foreground">{selectedFile}</span>
@@ -563,7 +671,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                     <Button
                         onPress={handleSave}
                         disabled={!selectedFile}
-                        className="bg-primary hover:bg-primary-hover text-primary-foreground px-4 py-2 rounded-lg flex items-center gap-2"
+                        className="bg-primary hover:bg-primary-hover text-primary-foreground px-4 py-2 rounded-(--radius) flex items-center gap-2"
                     >
                         <Save size={18} />
                         Save
@@ -600,7 +708,7 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                                 selectedPath={selectedFile}
                                 onToggle={handleToggleFolder}
                                 expandedPaths={expandedPaths}
-                                onDelete={handleDelete}
+                                onDelete={handleDeleteClick}
                                 onDrop={handleDrop}
                                 onSelectFolder={handleFolderSelect}
                                 selectedFolder={selectedFolder}
@@ -617,24 +725,30 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                     />
                 </div>
 
-                <div className={`flex-1 ${isDark ? 'bg-[#1e1e1e]' : 'bg-white'}`}>
+                <div className={`flex-1 bg-(--bg-primary)`}>
                     {selectedFile ? (
-                        <Editor
-                            height="100%"
-                            defaultLanguage="json"
-                            path={selectedFile}
-                            value={fileContent}
-                            onChange={(value) => setFileContent(value)}
-                            onMount={(editor) => { editorRef.current = editor; }}
-                            theme={isDark ? "vs-dark" : "light"}
-                            options={{
-                                minimap: { enabled: true },
-                                fontSize: 14,
-                                scrollBeyondLastLine: false,
-                                automaticLayout: true,
-                                readOnly: false
-                            }}
-                        />
+                        <div className="h-full flex flex-col">
+                            <div className="bg-card border-b border-card px-4 py-2 text-sm text-muted-foreground flex items-center gap-2">
+                                <File size={14} />
+                                {selectedFile}
+                            </div>
+                            <Editor
+                                height="100%"
+                                defaultLanguage="json"
+                                path={selectedFile}
+                                value={fileContent}
+                                onChange={(value) => setFileContent(value)}
+                                onMount={(editor) => { editorRef.current = editor; }}
+                                theme={isDark ? "vs-dark" : "vs-light"}
+                                options={{
+                                    minimap: { enabled: true },
+                                    fontSize: 14,
+                                    scrollBeyondLastLine: false,
+                                    automaticLayout: true,
+                                    readOnly: false
+                                }}
+                            />
+                        </div>
                     ) : (
                         <div className="h-full flex items-center justify-center text-muted flex-col gap-2">
                             <File size={48} className="opacity-20" />
@@ -656,7 +770,11 @@ export const RawEditor = ({ onBack, currentBranch, isDark }) => {
                 onSubmit={handleRenameSubmit}
             />
 
-            <Toast message={message} />
+            <DeleteDialog
+                {...deleteDialog}
+                onClose={() => setDeleteDialog({ ...deleteDialog, show: false })}
+                onConfirm={handleDeleteConfirm}
+            />
         </div>
     );
 };

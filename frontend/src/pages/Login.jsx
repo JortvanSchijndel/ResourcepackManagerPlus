@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { API_URL } from '../config/constants';
 import { Button, Input, Label, TextField } from "@heroui/react";
 
 const Login = () => {
@@ -10,6 +11,27 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const [brandName, setBrandName] = useState('Resource Pack Manager');
+  const [brandIconUrl, setBrandIconUrl] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchBranding = async () => {
+      try {
+        const res = await fetch(`${API_URL}/branding`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!mounted) return;
+        if (data?.name) setBrandName(data.name);
+        if (data?.icon_url) setBrandIconUrl(data.icon_url);
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchBranding();
+    return () => { mounted = false; };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,7 +56,8 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md bg-card border border-card rounded-xl shadow-lg p-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Resource Pack Manager</h1>
+          {brandIconUrl && <div className="mx-auto w-16 h-16 rounded overflow-hidden mb-4"><img src={brandIconUrl} alt={brandName || 'App icon'} className="w-full h-full object-cover" /></div>}
+          <h1 className="text-2xl font-bold text-foreground">{brandName || 'Resource Pack Manager'}</h1>
           <p className="text-secondary text-sm mt-2">Please sign in to continue</p>
         </div>
 

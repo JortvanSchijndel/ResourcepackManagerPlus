@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button } from '@heroui/react';
+import { Modal, Button, toast } from '@heroui/react';
 import { api } from '../../services/api';
-import { useToast } from '../../hooks/useToast';
 
 export const PushToServerModal = ({ servers, currentBranch, show, onClose }) => {
   const [selectedServers, setSelectedServers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { showMessage } = useToast();
 
   useEffect(() => {
     if (!show) {
@@ -25,7 +23,7 @@ export const PushToServerModal = ({ servers, currentBranch, show, onClose }) => 
 
   const handlePush = async () => {
     if (selectedServers.length === 0) {
-      showMessage('Please select at least one server.', 'warning');
+      toast.warning('Please select at least one server.');
       return;
     }
     setLoading(true);
@@ -38,15 +36,15 @@ export const PushToServerModal = ({ servers, currentBranch, show, onClose }) => 
       const errors = results.filter(r => !r.success);
 
       if (successes.length > 0) {
-        showMessage(`Successfully pushed to ${successes.length} server(s).`);
+        toast.success(`Successfully pushed to ${successes.length} server(s).`);
       }
       if (errors.length > 0) {
         const errorDetails = errors.map(e => e.message || 'Unknown error').join(', ');
-        showMessage(`Failed to push to ${errors.length} server(s): ${errorDetails}`, 'error');
+        toast.danger(`Failed to push to ${errors.length} server(s): ${errorDetails}`);
       }
       onClose();
     } catch (error) {
-      showMessage(error.message || 'An unexpected error occurred during push.', 'error');
+      toast.danger(error.message || 'An unexpected error occurred during push.');
     } finally {
       setLoading(false);
     }

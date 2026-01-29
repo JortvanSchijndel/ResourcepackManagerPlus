@@ -1,12 +1,18 @@
 import React, { useState, useRef, Suspense, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls } from '../models/OrbitControls';
-import { Modal, Button, TextField, Label, Input, Description } from '@heroui/react';
-import { Plus, Trash2, Upload, ChevronRight } from 'lucide-react';
-import { api } from '../../services/api';
-import { MinecraftModel } from '../models/MinecraftModel';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { useAuth } from '../../hooks/useAuth';
+import { OrbitControls } from '../3d/OrbitControls';
+import {
+  Modal,
+  Button,
+  TextField,
+  Label,
+  Input,
+  toast
+} from '@heroui/react';
+import { Upload } from 'lucide-react';
+import { MinecraftModel } from '../3d/MinecraftModel';
+import { TagSelector } from '../form/TagSelector';
+import { CategorySelector } from '../form/CategorySelector';
 
 const SceneCapture = ({ onRegister }) => {
   const { gl, scene, camera } = useThree();
@@ -21,574 +27,6 @@ const SceneCapture = ({ onRegister }) => {
   }, [gl, scene, camera, onRegister]);
 
   return null;
-};
-
-const AddTagModal = ({ show, onClose, onAdd }) => {
-  const [tagName, setTagName] = useState('');
-  const [tagColor, setTagColor] = useState('#3b82f6');
-  const [tagGroup, setTagGroup] = useState('');
-
-  useEffect(() => {
-    if (show) {
-      setTagName('');
-      setTagColor('#3b82f6');
-      setTagGroup('');
-    }
-  }, [show]);
-
-  const handleSubmit = () => {
-    if (!tagName.trim()) {
-      alert('Please enter a tag name');
-      return;
-    }
-
-    onAdd({
-      tag: tagName.trim(),
-      color: tagColor,
-      group: tagGroup || null
-    });
-  };
-
-
-  if (!show) return null;
-
-  return (
-      <Modal isOpen={show} onOpenChange={onClose}>
-        <Modal.Backdrop className="">
-          <Modal.Container className="max-w-md">
-            <Modal.Dialog>
-              <Modal.CloseTrigger className="text-tertiary hover:text-foreground" />
-              <Modal.Header>
-                <Modal.Heading className="text-xl font-semibold text-foreground">
-                  Add Custom Tag
-                </Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className="space-y-4">
-                <TextField>
-                  <Label className="text-sm font-medium text-secondary">
-                    Tag Name<span className="text-red-500 ml-1">*</span>
-                  </Label>
-                  <Input
-                      value={tagName}
-                      onChange={(e) => setTagName(e.target.value)}
-                      placeholder="Enter tag name..."
-                      className="w-full placeholder-background-inverse"
-                      onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                      autoComplete="off"
-                      data-1p-ignore
-                  />
-                </TextField>
-
-                <div>
-                  <Label className="text-sm font-medium text-secondary mb-2 block">
-                    Color<span className="text-red-500 ml-1">*</span>
-                  </Label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                        type="color"
-                        value={tagColor}
-                        onChange={(e) => setTagColor(e.target.value)}
-                        className="w-10 h-10 rounded cursor-pointer border border-default"
-                    />
-                    <span className="text-sm text-tertiary">{tagColor}</span>
-                  </div>
-                </div>
-
-                <TextField>
-                  <Label className="text-sm font-medium text-secondary">
-                    Group (optional)
-                  </Label>
-                  <Input
-                      value={tagGroup}
-                      onChange={(e) => setTagGroup(e.target.value)}
-                      placeholder="e.g., area, type, status..."
-                      className="w-full placeholder-background-inverse"
-                      autoComplete="off"
-                      data-1p-ignore
-                  />
-                </TextField>
-              </Modal.Body>
-              <Modal.Footer className="flex gap-3 pt-4">
-                <Button
-                    onPress={handleSubmit}
-                    className="flex-1 bg-(--primary) hover:bg-(--primary-hover) text-(--primary-foreground)"
-                >
-                  Add Tag
-                </Button>
-                <Button onPress={onClose} className="text-secondary">
-                  Cancel
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-  );
-};
-
-const TagSelector = ({ selectedTags, onChange }) => {
-  const [customTags, setCustomTags] = useState([])
-  const [showAddModal, setShowAddModal] = useState(false)
-  const { isAdmin } = useAuth();
-
-  useEffect(() => {
-    const fetchTags = async () => {
-      try {
-        const res = await api.getTags()
-        if (res?.tags) {
-          // Normalize tags for frontend usage
-          const normalized = res.tags.map(t => ({
-            id: t.id,
-            name: t.tag,       // frontend expects "name" for label
-            color: t.color,
-            group: t.group || null
-          }))
-          setCustomTags(normalized)
-        }
-      } catch (err) {
-        console.error('Failed to fetch tags', err)
-      }
-    }
-    fetchTags()
-  }, [])
-
-
-  const toggleTag = (id) => {
-    onChange(
-        selectedTags.includes(id)
-            ? selectedTags.filter(t => t !== id)
-            : [...selectedTags, id]
-    )
-  }
-
-  const handleAddCustomTag = async ({ tag, color, group }) => {
-    try {
-      const data = await api.addTag({ tag, color, group });
-
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to create tag');
-      }
-
-      // Normalize tags for frontend immediately
-      const normalized = data.tags.map(t => ({
-        id: t.id,
-        name: t.tag,    // 👈 frontend expects "name"
-        color: t.color,
-        group: t.group || null
-      }));
-
-      setCustomTags(normalized);
-
-      const newTag = normalized.find(t => t.name === tag);
-      if (newTag) {
-        onChange([...selectedTags, newTag.id]);
-      }
-
-      setShowAddModal(false);
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-
-  const handleDeleteTag = async (e, tag) => {
-    e.stopPropagation()
-    if (!confirm('Delete this tag?')) return
-
-    try {
-      const res = await api.deleteTag(tag)
-      if (res.success) {
-        setCustomTags(res.tags)
-        onChange(selectedTags.filter(id => id !== tag.id))
-      }
-    } catch {
-      alert('Failed to delete tag')
-    }
-  }
-
-  const { grouped, ungrouped } = customTags.reduce(
-      (acc, tag) => {
-        if (!tag.group || tag.group === 'Other') {
-          acc.ungrouped.push(tag)
-        } else {
-          acc.grouped[tag.group] ||= []
-          acc.grouped[tag.group].push(tag)
-        }
-        return acc
-      },
-      { grouped: {}, ungrouped: [] }
-  )
-
-  return (
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-secondary">Tags</label>
-
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-                className="
-              w-full min-h-10 px-3 py-2
-              border border-default rounded-lg
-              bg-accent text-primary
-              flex flex-wrap gap-2 text-left
-            "
-            >
-              {selectedTags.length === 0 && (
-                  <span className="text-tertiary text-sm">Select tags…</span>
-              )}
-
-              {selectedTags.map(id => {
-                const tag = customTags.find(t => t.id === id)
-                return tag ? (
-                    <span
-                        key={id}
-                        className="px-2 py-0.5 rounded-md text-sm border"
-                        style={{
-                          backgroundColor: tag.color ? `${tag.color}33` : 'var(--muted)', // 20% opacity
-                          borderColor: tag.color || 'var(--border)',
-                          color: tag.color || 'var(--primary)'
-                        }}
-                    >
-                    {tag.name}
-                  </span>
-                ) : null
-              })}
-            </button>
-          </DropdownMenu.Trigger>
-
-          {/* MAIN MENU */}
-          <DropdownMenu.Content
-              sideOffset={6}
-              className="
-            z-50 w-64 p-1
-            bg-popover border border-popover-border
-            rounded-lg shadow-xl
-          "
-          >
-            {isAdmin && (
-              <>
-                <DropdownMenu.Item
-                    onSelect={() => setShowAddModal(true)}
-                    className="
-                  flex items-center gap-2
-                  px-2 py-1.5 text-sm
-                  text-primary rounded-md
-                  cursor-pointer
-                  hover:bg-accent
-                "
-                >
-                  <Plus size={14} />
-                  Create New Tag
-                </DropdownMenu.Item>
-
-                <DropdownMenu.Separator className="my-1 h-px bg-separator" />
-              </>
-            )}
-
-            {/* GROUPS */}
-            {Object.keys(grouped).sort().map(groupName => (
-                <DropdownMenu.Sub key={groupName}>
-                  <DropdownMenu.SubTrigger
-                      className="
-                  flex items-center justify-between
-                  px-2 py-1.5 text-sm
-                  text-secondary rounded-md
-                  cursor-pointer
-                  hover:bg-accent
-                "
-                  >
-                    {groupName}
-                    <ChevronRight size={14} className="text-tertiary" />
-                  </DropdownMenu.SubTrigger>
-
-                  {/* SUB MENU */}
-                  <DropdownMenu.SubContent
-                      sideOffset={6}
-                      className="
-                  z-50 min-w-60 w-60 p-1
-                  bg-popover border border-popover-border
-                  rounded-lg shadow-xl
-                "
-                  >
-                    {grouped[groupName].map(tag => (
-                        <DropdownMenu.Item
-                            key={tag.id}
-                            onSelect={() => toggleTag(tag.id)}
-                            className="
-                      flex items-center justify-between
-                      px-2 py-1.5 text-sm
-                      text-primary rounded-md
-                      cursor-pointer
-                      hover:bg-accent
-                    "
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                readOnly
-                                checked={selectedTags.includes(tag.id)}
-                                className="accent-(--primary)"
-                            />
-                            {tag.color && (
-                                <span
-                                    className="w-3 h-3 rounded-full border border-default"
-                                    style={{ backgroundColor: tag.color }}
-                                />
-                            )}
-                            <span>{tag.name}</span>
-                          </div>
-
-
-                          {isAdmin && (
-                            <button
-                                onClick={(e) => handleDeleteTag(e, tag)}
-                                className="
-                          text-danger hover:text-danger-hover
-                          p-1 rounded
-                        "
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </DropdownMenu.Item>
-                    ))}
-                  </DropdownMenu.SubContent>
-                </DropdownMenu.Sub>
-            ))}
-
-            {/* UNGROUPED */}
-            {ungrouped.length > 0 && (
-                <>
-                  <DropdownMenu.Separator className="my-1 h-px bg-separator" />
-
-                  {ungrouped.map(tag => (
-                      <DropdownMenu.Item
-                          key={tag.id}
-                          onSelect={() => toggleTag(tag.id)}
-                          className="
-                    flex items-center justify-between
-                    px-2 py-1.5 text-sm
-                    text-primary rounded-md
-                    cursor-pointer
-                    hover:bg-accent
-                  "
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                              type="checkbox"
-                              readOnly
-                              checked={selectedTags.includes(tag.id)}
-                              className="accent-(--primary)"
-                          />
-                          {tag.color && (
-                              <span
-                                  className="w-3 h-3 rounded-full border border-default"
-                                  style={{ backgroundColor: tag.color }}
-                              />
-                          )}
-                          <span>{tag.name}</span>
-                        </div>
-
-
-                        {isAdmin && (
-                          <button
-                              onClick={(e) => handleDeleteTag(e, tag)}
-                              className="text-danger hover:text-danger-hover p-1"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </DropdownMenu.Item>
-                  ))}
-                </>
-            )}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-
-        <AddTagModal
-            show={showAddModal}
-            onClose={() => setShowAddModal(false)}
-            onAdd={handleAddCustomTag}
-        />
-      </div>
-  )
-};
-
-const AddCategoryModal = ({ show, onClose, onAdd, loading }) => {
-  const [name, setName] = useState('');
-
-  useEffect(() => {
-    if (show) setName('');
-  }, [show]);
-
-  const handleSubmit = () => {
-    if (!name.trim()) {
-      alert('Please enter a category name');
-      return;
-    }
-    onAdd(name.trim());
-  };
-
-  if (!show) return null;
-
-  return (
-      <Modal isOpen={show} onOpenChange={onClose}>
-        <Modal.Backdrop className="">
-          <Modal.Container className="max-w-md">
-            <Modal.Dialog>
-              <Modal.CloseTrigger className="text-tertiary hover:text-foreground" />
-              <Modal.Header>
-                <Modal.Heading className="text-xl font-semibold text-foreground">
-                  Add New Category
-                </Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <TextField>
-                  <Label className="text-sm font-medium text-secondary">
-                    Category<span className="text-red-500 ml-1">*</span>
-                  </Label>
-                  <Description className="text-xs text-tertiary mb-2">
-                    A unique identifier for your resource pack category
-                  </Description>
-                  <Input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g., ingeniamc, mypack..."
-                      className="w-full placeholder-background-inverse"
-                      onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                      autoComplete="off"
-                      data-1p-ignore
-                  />
-                </TextField>
-              </Modal.Body>
-              <Modal.Footer className="flex gap-3 pt-4">
-                <Button
-                    onPress={handleSubmit}
-                    isDisabled={loading}
-                    className="flex-1 bg-(--primary) hover:bg-(--primary-hover) text-(--primary-foreground)"
-                >
-                  {loading ? 'Adding...' : 'Add'}
-                </Button>
-                <Button onPress={onClose} className="text-secondary">
-                  Cancel
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-  );
-};
-
-const CategoryDropdown = ({ value, onChange, options, onAdd, onDelete, isOpen, setIsOpen }) => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const dropdownRef = useRef(null);
-  const { isAdmin } = useAuth();
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen, setIsOpen]);
-
-  const handleSelection = (e, selected) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (selected === '__add_new__') {
-      setShowAddModal(true);
-      setIsOpen(false);
-    } else {
-      onChange(selected);
-      setIsOpen(false);
-    }
-  };
-
-  const handleDelete = (e, opt) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (confirm(`Are you sure you want to delete the category "${opt}"?`)) {
-      onDelete(opt);
-    }
-  };
-
-  return (
-      <>
-        <div ref={dropdownRef}>
-          <Label className="block text-sm text-secondary mb-2">
-            Category<span className="text-red-500 ml-1">*</span>
-          </Label>
-          <Description className="text-xs text-tertiary mb-2">
-            The category for your resource pack (becomes part of the path)
-          </Description>
-          <div className="relative">
-            <Button onPress={() => setIsOpen(!isOpen)} className="w-full justify-between font-normal">
-              {value || 'Select category...'}
-            </Button>
-            {isOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-(--popover) border border-popover-border rounded-lg max-h-62.5 overflow-y-auto shadow-xl">
-                  {isAdmin && (
-                    <>
-                      <div
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            handleSelection(e, '__add_new__');
-                          }}
-                          className="flex items-center gap-2 text-(--primary) px-3 py-2 hover:bg-accent cursor-pointer transition-colors rounded-t-lg"
-                      >
-                        <Plus size={16} />
-                        <span>Add new category</span>
-                      </div>
-                      {options.length > 0 && <div className="h-px bg-separator mx-2 my-1" />}
-                    </>
-                  )}
-                  {options.map((opt) => (
-                      <div
-                          key={opt}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            handleSelection(e, opt);
-                          }}
-                          className="flex items-center justify-between group px-3 py-2 hover:bg-accent cursor-pointer transition-colors"
-                      >
-                        <span className="text-foreground">{opt}</span>
-                        {isAdmin && (
-                          <button
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleDelete(e, opt);
-                              }}
-                              className="opacity-0 group-hover:opacity-100 text-(--danger) hover:text-(--danger-hover) transition-opacity ml-2 p-1"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                  ))}
-                </div>
-            )}
-          </div>
-        </div>
-
-        <AddCategoryModal
-            show={showAddModal}
-            onClose={() => setShowAddModal(false)}
-            onAdd={(name) => {
-              onAdd(name);
-              setShowAddModal(false);
-            }}
-        />
-      </>
-  );
 };
 
 export const UploadModal = ({
@@ -608,7 +46,6 @@ export const UploadModal = ({
   const [uploadPreview, setUploadPreview] = useState(null);
   const [bbmodelData, setBbmodelData] = useState(null);
   const [localCategories, setLocalCategories] = useState(categories);
-  const [openDropdown, setOpenDropdown] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
   const [identifierError, setIdentifierError] = useState('');
   const captureThumbnailRef = useRef(null);
@@ -627,7 +64,6 @@ export const UploadModal = ({
       setIsIdentifierTouched(false);
       setUploadPreview(null);
       setBbmodelData(null);
-      setOpenDropdown(null);
       setSelectedTags([]);
       setIdentifierError('');
     }
@@ -692,12 +128,12 @@ export const UploadModal = ({
 
   const handleSubmit = async () => {
     if (!bbmodelFile || !jsonFile || !uploadCategory || !uploadModelName || !modelIdentifier) {
-      alert('Please fill all required fields and upload both files');
+      toast.danger('Please fill all required fields and upload both files');
       return;
     }
 
     if (identifierError) {
-      alert('Please fix the errors before uploading.');
+      toast.danger('Please fix the errors before uploading.');
       return;
     }
 
@@ -726,7 +162,7 @@ export const UploadModal = ({
   const handleAddCategory = (name) => {
     const filtered = name.replace(/[^a-z0-9_-]/gi, '');
     if (!filtered) {
-      alert('Category must contain only letters, numbers, underscores, and hyphens');
+      toast.danger('Category must contain only letters, numbers, underscores, and hyphens');
       return;
     }
     setLocalCategories(prev => [...prev, filtered]);
@@ -745,7 +181,7 @@ export const UploadModal = ({
         <Modal.Backdrop>
           <Modal.Container className="w-full min-w-200 max-w-[95vw] mx-4 h-[calc(100vh-100px)] my-auto">
             <Modal.Dialog className="bg-card border border-card flex flex-col h-full transition-colors">
-              <Modal.CloseTrigger className="text-tertiary hover:text-foreground" />
+              <Modal.CloseTrigger />
 
               <Modal.Header className="shrink-0">
                 <Modal.Heading className="text-2xl font-semibold text-foreground">
@@ -753,18 +189,15 @@ export const UploadModal = ({
                 </Modal.Heading>
               </Modal.Header>
 
-              <Modal.Body className="space-y-5 pr-2 overflow-y-auto flex-1">
+              <Modal.Body className="space-y-5 pr-2 overflow-y-auto flex-1 p-1">
                 {/* File Uploads */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* BBModel File */}
-                  <div>
-                    <Label className="block text-sm font-medium text-secondary mb-2">
-                      BBModel File (.bbmodel)<span className="text-red-500 ml-1">*</span>
+                  <div className="flex flex-col gap-2">
+                    <Label className="block text-sm font-medium text-secondary">
+                      BBModel File (.bbmodel)<span className="text-danger ml-1">*</span>
                     </Label>
-                    <Description className="text-xs text-tertiary mb-2">
-                      For textures and 3D preview
-                    </Description>
-                    <div className="relative">
+                    <div className="relative group">
                       <input
                           type="file"
                           accept=".bbmodel"
@@ -774,23 +207,20 @@ export const UploadModal = ({
                       />
                       <label
                           htmlFor="bbmodel-upload"
-                          className="flex items-center justify-center gap-2 w-full bg-accent text-foreground border border-default rounded-lg px-4 py-3 text-sm cursor-pointer hover:bg-(--accent-hover) transition-colors"
+                          className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer bg-surface hover:bg-surface-hover transition-colors"
                       >
-                        <Upload size={16} />
-                        <span>{bbmodelFile ? bbmodelFile.name : 'Choose .bbmodel file'}</span>
+                        <Upload className="w-8 h-8 text-muted-foreground mb-2 group-hover:text-primary transition-colors" />
+                        <span className="text-sm font-medium text-foreground">{bbmodelFile ? bbmodelFile.name : 'Choose .bbmodel file'}</span>
                       </label>
                     </div>
                   </div>
 
                   {/* JSON File */}
-                  <div>
-                    <Label className="block text-sm font-medium text-secondary mb-2">
-                      Model JSON (.json)<span className="text-red-500 ml-1">*</span>
+                  <div className="flex flex-col gap-2">
+                    <Label className="block text-sm font-medium text-secondary">
+                      Model JSON (.json)<span className="text-danger ml-1">*</span>
                     </Label>
-                    <Description className="text-xs text-tertiary mb-2">
-                      Your Minecraft item model
-                    </Description>
-                    <div className="relative">
+                    <div className="relative group">
                       <input
                           type="file"
                           accept=".json"
@@ -800,10 +230,10 @@ export const UploadModal = ({
                       />
                       <label
                           htmlFor="json-upload"
-                          className="flex items-center justify-center gap-2 w-full bg-accent text-foreground border border-default rounded-lg px-4 py-3 text-sm cursor-pointer hover:bg-(--accent-hover) transition-colors"
+                          className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer bg-surface hover:bg-surface-hover transition-colors"
                       >
-                        <Upload size={16} />
-                        <span>{jsonFile ? jsonFile.name : 'Choose .json file'}</span>
+                        <Upload className="w-8 h-8 text-muted-foreground mb-2 group-hover:text-primary transition-colors" />
+                        <span className="text-sm font-medium text-foreground">{jsonFile ? jsonFile.name : 'Choose .json file'}</span>
                       </label>
                     </div>
                   </div>
@@ -831,16 +261,13 @@ export const UploadModal = ({
                 {/* Model Name */}
                 <TextField>
                   <Label className="text-sm font-medium text-secondary">
-                    Model Name<span className="text-red-500 ml-1">*</span>
+                    Model Name<span className="text-danger ml-1">*</span>
                   </Label>
-                  <Description className="text-xs text-tertiary mb-2">
-                    Display name for your model
-                  </Description>
                   <Input
                       value={uploadModelName}
                       onChange={(e) => setUploadModelName(e.target.value)}
                       placeholder="e.g., Cool Sword"
-                      className="w-full placeholder-background-inverse bg-accent hover:bg-(--accent-hover)"
+                      className="w-full"
                       autoComplete="off"
                       data-1p-ignore
                       data-bwignore
@@ -849,24 +276,19 @@ export const UploadModal = ({
                 </TextField>
 
                 {/* Namespace (Category) */}
-                <CategoryDropdown
+                <CategorySelector
                     value={uploadCategory}
                     onChange={setUploadCategory}
                     options={localCategories}
                     onAdd={handleAddCategory}
                     onDelete={handleDeleteCategory}
-                    isOpen={openDropdown === 'category'}
-                    setIsOpen={(open) => setOpenDropdown(open ? 'category' : null)}
                 />
 
                 {/* Model Identifier */}
                 <TextField>
                   <Label className="text-sm font-medium text-secondary">
-                    Model Identifier<span className="text-red-500 ml-1">*</span>
+                    Model Identifier<span className="text-danger ml-1">*</span>
                   </Label>
-                  <Description className="text-xs text-tertiary mb-2">
-                    Unique string identifier for minecraft:item_model
-                  </Description>
                   <Input
                       value={modelIdentifier}
                       onChange={(e) => {
@@ -874,12 +296,12 @@ export const UploadModal = ({
                         setIsIdentifierTouched(true);
                       }}
                       placeholder="cool_sword"
-                      className={`w-full placeholder-background-inverse bg-accent hover:bg-(--accent-hover) ${identifierError ? 'border-red-500' : ''}`}
+                      className={`w-full ${identifierError ? 'border-danger' : ''}`}
                       autoComplete="off"
                       data-1p-ignore
                   />
                   {identifierError && (
-                    <div className="text-xs text-red-500 mt-1">{identifierError}</div>
+                    <div className="text-xs text-danger mt-1">{identifierError}</div>
                   )}
                 </TextField>
 
@@ -894,13 +316,14 @@ export const UploadModal = ({
                 <Button
                     onPress={handleSubmit}
                     isDisabled={loading || !!identifierError}
-                    className="flex-1 bg-(--success) hover:bg-(--success-hover) text-success-foreground px-6 py-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Uploading...' : 'Upload Model'}
                 </Button>
                 <Button
                     onPress={onClose}
-                    className="border border-default text-secondary px-6 py-3 text-sm font-medium"
+                    variant="outline"
+                    className="border border-border text-secondary px-6 py-3 text-sm font-medium"
                 >
                   Cancel
                 </Button>

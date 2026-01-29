@@ -34,7 +34,7 @@ export const CopyMoveModal = ({
 
   const handleSubmit = () => {
     if (!targetBranch || !targetArea || !targetCategory || !targetName) {
-      alert('All fields are required');
+      toast.danger('All fields are required');
       return;
     }
 

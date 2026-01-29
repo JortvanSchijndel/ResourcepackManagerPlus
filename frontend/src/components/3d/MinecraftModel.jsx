@@ -60,7 +60,7 @@ export const MinecraftModel = ({ modelData, bbModelData, branch, namespace, mode
                     newTextureMap[key] = texture;
                     newTextureMap[`#${key}`] = texture;
                 } catch (e) {
-                    // console.warn(`Failed to load texture ${key} from API:`, e);
+                    console.warn(`Failed to load texture ${key} from API:`, e);
                 }
             }
         }

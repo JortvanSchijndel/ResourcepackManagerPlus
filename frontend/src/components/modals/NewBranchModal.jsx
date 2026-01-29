@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, TextField, Label, Input, Dropdown } from '@heroui/react';
+import { Modal, Button, TextField, Label, Input, Dropdown, toast } from '@heroui/react';
 import { useAuth } from '../../hooks/useAuth';
 
 export const NewBranchModal = ({
@@ -25,7 +25,7 @@ export const NewBranchModal = ({
 
   const handleSubmit = () => {
     if (!branchName.trim()) {
-      alert('Branch name is required');
+      toast.danger('Branch name is required');
       return;
     }
     onSubmit(branchName, copyFrom);

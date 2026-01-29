@@ -1,7 +1,8 @@
-import React from 'react';
-import { Dropdown, Button } from '@heroui/react';
-import { Sun, Moon, Settings, LogOut, ChevronsUpDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {Dropdown, Button, Avatar, Label, Select, ListBox, Tabs} from '@heroui/react';
+import { Sun, Moon, SunMoon, ChevronsUpDown, User, Settings, LogOut } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { API_URL } from '../../config/constants';
 import { useNavigate } from 'react-router-dom';
 
 export const TopBar = ({
@@ -10,12 +11,27 @@ export const TopBar = ({
   onBranchChange,
   onNewBranch,
   onDeleteBranch,
-  isDark,
-  onToggleTheme,
   onLogout
 }) => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, themePreference, setThemePreference } = useAuth();
   const navigate = useNavigate();
+
+  const [brandName, setBrandName] = useState('Resource Pack Manager');
+  const [brandIconUrl, setBrandIconUrl] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchBranding = async () => {
+    const res = await fetch(`${API_URL}/branding`, { credentials: 'include' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!mounted) return;
+    if (data?.name) setBrandName(data.name);
+    if (data?.icon_url) setBrandIconUrl(data.icon_url);
+    };
+    fetchBranding();
+    return () => { mounted = false; };
+  }, []);
 
   const handleUserMenuAction = (key) => {
     if (key === 'settings') {
@@ -26,51 +42,53 @@ export const TopBar = ({
   };
 
   return (
-    <div className="bg-card border-b border-default px-6 py-3 flex justify-between items-center sticky top-0 z-100 transition-colors">
+    <div className="border-b px-6 py-3 flex justify-between items-center sticky top-0 z-100 transition-colors backdrop-blur-(--blur)">
       <div className="flex items-center gap-4">
-        <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center text-lg font-bold text-primary-foreground bg-linear-to-r from-cyan-500 to-blue-500">
-          RP
+        <div className="w-9 h-9 flex items-center justify-center text-lg font-bold">
+          {brandIconUrl ? (
+            <img src={brandIconUrl} alt={brandName || 'App icon'} className="w-full h-full object-cover rounded" />
+          ) : (
+            'RP'
+          )}
         </div>
         <div>
-          <h1 className="text-base font-semibold flex items-center gap-2 text-foreground">
-            Resource Pack Manager
+          <h1 className="text-base font-semibold flex items-center gap-2">
+            {brandName || 'Resource Pack Manager'}
           </h1>
-          <p className="text-xs text-muted">v1.0</p>
         </div>
       </div>
 
       <div className="flex gap-3 items-center">
-        <Button variant="ghost" size="icon" onPress={onToggleTheme} className="bg-(--secondary) hover:bg-muted">
-          {isDark ? <Sun size={18} /> : <Moon size={18} />}
-        </Button>
-
         {currentBranch && (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted">Branch:</span>
-            <Dropdown>
-              <Dropdown.Trigger>
-                <div className="min-w-40 justify-between border border-default hover:bg-muted-hover-hover bg-muted rounded-lg px-3 py-2 text-sm transition-all flex items-center gap-2 cursor-pointer">
-                  <span>{currentBranch}</span>
-                  <ChevronsUpDown size={14} className="text-muted" />
-                </div>
-              </Dropdown.Trigger>
-              <Dropdown.Popover className="w-[--trigger-width]">
-                <Dropdown.Menu 
-                  onAction={(key) => onBranchChange && onBranchChange(key)} 
-                >
+            <span className="text-sm">Branch:</span>
+            <Select
+              value={currentBranch}
+              onChange={onBranchChange}
+              className="min-w-40"
+              aria-label="Select current branch"
+            >
+              <Select.Trigger className="rounded-xl">
+                <Select.Value />
+                <Select.Indicator>
+                  <ChevronsUpDown size={14} />
+                </Select.Indicator>
+              </Select.Trigger>
+              <Select.Popover className="rounded-xl">
+                <ListBox>
                   {branches && branches.map((b) => (
-                    <Dropdown.Item id={b} key={b}>
+                    <ListBox.Item id={b} key={b}>
                       {b}
-                    </Dropdown.Item>
+                    </ListBox.Item>
                   ))}
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown>
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
         )}
 
         {isAdmin && onNewBranch && (
-          <Button onPress={onNewBranch} className="bg-secondary rounded-lg hover:bg-secondary-hover text-secondary-foreground">
+          <Button onPress={onNewBranch}>
             + New Branch
           </Button>
         )}
@@ -86,20 +104,70 @@ export const TopBar = ({
 
         <Dropdown>
           <Dropdown.Trigger>
-            <div className="bg-muted hover:bg-muted-hover text-foreground rounded-lg px-4 py-2 text-sm font-medium transition-all flex items-center gap-2 cursor-pointer">
-              <span>{user?.username}</span>
-              <ChevronsUpDown size={14} className="text-muted" />
-            </div>
+            <Avatar>
+              <Avatar.Image
+                alt={user?.username}
+              />
+              <Avatar.Fallback delayMs={200}>
+                <User />
+              </Avatar.Fallback>
+            </Avatar>
           </Dropdown.Trigger>
-          <Dropdown.Popover className="w-[--trigger-width]">
+          <Dropdown.Popover className="rounded-(--other-radius) backdrop-blur-(--blur) bg-transparent">
+            <div className="px-3 pt-3 pb-1 ">
+              <div className="flex items-center gap-2">
+                <Avatar size="sm">
+                  <Avatar.Image
+                    alt={user?.username}
+                  />
+                  <Avatar.Fallback delayMs={200} className="bg-(--bg-quaternary)">
+                   <User size={18}/>
+                  </Avatar.Fallback>
+                </Avatar>
+                <div className="flex flex-col gap-0">
+                  <p className="text-sm leading-5 font-medium">{user?.username}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-2 py-2 w-full">
+               <Tabs 
+                  fullWidth 
+                  aria-label="Theme"
+                  selectedKey={themePreference}
+                  onSelectionChange={setThemePreference}
+                >
+                  <Tabs.ListContainer>
+                    <Tabs.List className="bg-(--bg-transparent-hover)">
+                        <Tabs.Tab id="light">
+                            <Sun className="size-4" />
+                            <Tabs.Indicator />
+                        </Tabs.Tab>
+                        <Tabs.Tab id="dark">
+                            <Moon className="size-4" />
+                            <Tabs.Indicator />
+                        </Tabs.Tab>
+                        <Tabs.Tab id="system">
+                            <SunMoon className="size-4" />
+                            <Tabs.Indicator />
+                        </Tabs.Tab>
+                    </Tabs.List>
+                  </Tabs.ListContainer>
+               </Tabs>
+            </div>
+
             <Dropdown.Menu onAction={handleUserMenuAction}>
-              <Dropdown.Item id="settings" textValue="Settings">
-                <Settings size={14} />
-                <span>Settings</span>
+              <Dropdown.Item id="settings" textValue="Settings" className="hover:bg-(--bg-transparent-hover)">
+                <div className="flex w-full items-center gap-2">
+                  <Settings className="size-3.5" />
+                  <Label>Settings</Label>
+                </div>
               </Dropdown.Item>
-              <Dropdown.Item id="logout" textValue="Logout" className="text-danger">
-                <LogOut size={14} />
-                <span>Logout</span>
+              <Dropdown.Item id="logout" textValue="Logout" variant="danger" className="hover:bg-(--bg-transparent-hover)">
+                <div className="flex w-full items-center gap-2">
+                  <LogOut className="size-3.5 text-(--danger)" />
+                  <Label>Log Out</Label>
+                </div>
               </Dropdown.Item>
             </Dropdown.Menu>
           </Dropdown.Popover>
