@@ -1218,6 +1218,7 @@ function GithubBackupSettings() {
     enabled: false,
   });
   const [loading, setLoading] = useState(true);
+  const [newToken, setNewToken] = useState('');
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -1239,13 +1240,19 @@ function GithubBackupSettings() {
 
   const handleSave = async () => {
     try {
+      const payload = {
+        ...settings,
+        token: newToken || undefined, // Only send token if it's new
+      };
+      
       const response = await fetchWithCreds(`${API_URL}/github/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
       if (response.ok) {
         toast.success('GitHub settings saved');
+        setNewToken(''); // Clear the input after saving
       } else {
         const data = await response.json();
         toast.danger(data.error || 'Failed to save settings');
@@ -1295,9 +1302,9 @@ function GithubBackupSettings() {
           <Label>Personal Access Token</Label>
           <Input
             type="password"
-            value={settings.token}
-            onChange={(e) => setSettings({ ...settings, token: e.target.value })}
-            placeholder="ghp_..."
+            value={newToken}
+            onChange={(e) => setNewToken(e.target.value)}
+            placeholder={settings.token ? 'PAT is currently set' : 'ghp_...'}
             disabled={!settings.enabled}
           />
         </TextField>

@@ -2195,15 +2195,28 @@ def rename_file():
 def get_github_settings():
     if current_user.role != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
-    return jsonify(load_github_settings())
+    settings = load_github_settings()
+    # Never send the token to the frontend
+    settings['token'] = 'PATISCURRENTLYSET' if settings.get('token') else ''
+    return jsonify(settings)
 
 @app.route('/api/github/settings', methods=['POST'])
 @login_required
 def set_github_settings():
     if current_user.role != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
-    settings = request.json
-    save_github_settings(settings)
+    
+    new_settings = request.json
+    current_settings = load_github_settings()
+
+    # Only update the token if a new one is provided and it's not the placeholder
+    if 'token' in new_settings and new_settings['token'] and new_settings['token'] != 'PATISCURRENTLYSET':
+        current_settings['token'] = new_settings['token']
+    
+    current_settings['repoUrl'] = new_settings.get('repoUrl', '')
+    current_settings['enabled'] = new_settings.get('enabled', False)
+    
+    save_github_settings(current_settings)
     trigger_backup()
     return jsonify({"success": True, "message": "Settings saved."})
 
