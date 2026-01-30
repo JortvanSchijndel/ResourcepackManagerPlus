@@ -16,7 +16,8 @@ import {
   CheckCircle,
   Tags,
   GitBranch,
-  SunMoon
+  SunMoon,
+  Github
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/constants';
@@ -52,7 +53,7 @@ const SceneCapture = ({ onRegister }) => {
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('profile');
-  const { user, isAdmin, isDark, setIsDark, themePreference, setThemePreference, branch } = useAuth();
+  const { user, isAdmin, isDark, themePreference, setThemePreference, branch } = useAuth();
   const navigate = useNavigate();
 
   // Branch selector state
@@ -109,7 +110,7 @@ const Settings = () => {
     return hexRegex.test(brandColor) ? brandColor : '#3b82f6';
   }, [brandColor]);
 
-  // Zorg dat de branch selector altijd een geldige branch heeft
+  // Ensure the branch selector always has a valid branch
   useEffect(() => {
     if (branches.length > 0 && (!selectedAuditBranch || !branches.includes(selectedAuditBranch))) {
       setSelectedAuditBranch(branches[0]);
@@ -187,18 +188,13 @@ const Settings = () => {
           const data = await response.json();
           if (data?.brand) {
             setBrandColor(data.brand);
-            // apply to document root variable
-            try {
-              document.documentElement.style.setProperty('--brand', data.brand);
-            } catch (e) {
-              // ignore if invalid CSS value
-            }
+            document.documentElement.style.setProperty('--brand', data.brand);
           }
           if (data?.name) {
             setBrandName(data.name);
             try {
               if (data.name) document.title = data.name;
-            } catch (e) {
+            } catch {
               // ignore
             }
           }
@@ -235,7 +231,7 @@ const Settings = () => {
       } else {
         toast.danger(result.error || 'Failed to add server');
       }
-    } catch (error) {
+    } catch {
       toast.danger('Failed to add server');
     }
   };
@@ -253,7 +249,7 @@ const Settings = () => {
       } else {
         toast.danger(result.error || 'Failed to delete server');
       }
-    } catch (error) {
+    } catch {
       toast.danger('Failed to delete server');
     }
   };
@@ -278,7 +274,7 @@ const Settings = () => {
         const data = await response.json();
         toast.danger(data.error || "Failed to create user");
       }
-    } catch (error) {
+    } catch {
       toast.danger("An error occurred");
     }
   };
@@ -380,7 +376,7 @@ const Settings = () => {
         const data = await response.json();
         toast.danger(data.error || "Failed to update profile");
       }
-    } catch (error) {
+    } catch {
       toast.danger("An error occurred");
     }
   };
@@ -404,7 +400,7 @@ const Settings = () => {
         const data = await response.json();
         toast.danger(data.error || "Failed to create tag");
       }
-    } catch (error) {
+    } catch {
       toast.danger("An error occurred");
     }
   };
@@ -425,14 +421,14 @@ const Settings = () => {
         const data = await response.json();
         toast.danger(data.error || "Failed to delete tag");
       }
-    } catch (error) {
+    } catch {
       toast.danger("An error occurred");
     }
   };
 
   const runAudit = async () => {
     if (!selectedAuditBranch) {
-      toast.danger("Selecteer eerst een branch voor de audit.");
+      toast.danger("Select a branch for the audit first.");
       return;
     }
     setAuditLoading(true);
@@ -452,7 +448,7 @@ const Settings = () => {
 
   const generateThumbnails = async () => {
     if (!selectedAuditBranch) {
-      toast.danger("Selecteer eerst een branch voor de audit.");
+      toast.danger("Select a branch for the audit first.");
       return;
     }
     const missingThumbnails = auditIssues.filter(i => i.issue === "Missing thumbnail");
@@ -547,7 +543,7 @@ const Settings = () => {
   const applyBrandColor = (color) => {
     try {
       document.documentElement.style.setProperty('--brand', color);
-    } catch (e) {
+    } catch {
       // ignore invalid CSS values
     }
   };
@@ -570,7 +566,7 @@ const Settings = () => {
       } else {
         toast.danger(data.error || "Failed to save brand color");
       }
-    } catch (e) {
+    } catch {
       toast.danger("Failed to save brand color");
     }
   };
@@ -585,7 +581,7 @@ const Settings = () => {
         body: JSON.stringify({ brand: BRAND_DEFAULT }),
       });
       toast.success("Brand color reset");
-    } catch (e) {
+    } catch {
       // ignore backend failures for reset
     }
   };
@@ -594,7 +590,7 @@ const Settings = () => {
     setBrandName(value);
     try {
       if (value) document.title = value;
-    } catch (e) {
+    } catch {
       // ignore
     }
   };
@@ -612,7 +608,7 @@ const Settings = () => {
       } else {
         toast.danger(data.error || "Failed to save brand name");
       }
-    } catch (e) {
+    } catch {
       toast.danger("Failed to save brand name");
     }
   };
@@ -646,7 +642,7 @@ const Settings = () => {
       } else {
         toast.danger(data.error || "Failed to upload icon");
       }
-    } catch (e) {
+    } catch {
       toast.danger("Failed to upload icon");
     }
   };
@@ -677,6 +673,7 @@ const Settings = () => {
     { id: 'audit', label: 'Model Audit', icon: AlertTriangle },
     ...(isAdmin ? [{ id: 'users', label: 'User Management', icon: User }] : []),
     { id: 'servers', label: 'Server Management', icon: Server },
+    { id: 'github_backup', label: 'GitHub Backup', icon: Github },
   ];
 
   const renderContent = () => {
@@ -690,11 +687,11 @@ const Settings = () => {
               <h2 className="text-2xl font-semibold flex items-center gap-2 mb-4">
                 {isDark ? <Moon className="h-6 w-6" /> : <Sun className="h-6 w-6" />} Appearance
               </h2>
-              <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6">
+              <div className="bg-(--bg-secondary) border border-border rounded-lg p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-[var(--txt-primary)]">Dark Mode</p>
-                    <p className="text-sm text-[var(--txt-secondary)]">Toggle between light and dark theme</p>
+                    <p className="font-medium text-(--txt-primary)">Dark Mode</p>
+                    <p className="text-sm text-(--txt-secondary)">Toggle between light and dark theme</p>
                   </div>
                   <Tabs
                     aria-label="Theme"
@@ -743,11 +740,11 @@ const Settings = () => {
               <h2 className="text-2xl font-semibold flex items-center gap-2 mb-4">
                 <User className="h-6 w-6" /> Profile Settings
               </h2>
-              <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6">
+              <div className="bg-(--bg-secondary) border border-border rounded-lg p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-[var(--txt-primary)]">Username: {user?.username}</p>
-                    <p className="text-sm text-[var(--txt-secondary)]">Role: {user?.role}</p>
+                    <p className="font-medium text-(--txt-primary)">Username: {user?.username}</p>
+                    <p className="text-sm text-(--txt-secondary)">Role: {user?.role}</p>
                   </div>
                   <Button onPress={() => setChangePasswordOpen(true)}>
                     <Key className="mr-2 h-4 w-4" /> Change Password / Username
@@ -765,51 +762,51 @@ const Settings = () => {
             <h2 className="text-2xl font-semibold flex items-center gap-2 mb-4">
               <ImageIcon className="h-6 w-6" /> Branding
             </h2>
-            <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-4">
+            <div className="bg-(--bg-secondary) border border-border rounded-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-[var(--txt-primary)]">Name</p>
-                  <p className="text-sm text-[var(--txt-secondary)]">Application name / title shown in the browser tab.</p>
+                  <p className="font-medium text-(--txt-primary)">Name</p>
+                  <p className="text-sm text-(--txt-secondary)">Application name / title shown in the browser tab.</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Input value={brandName} onChange={(e) => handleBrandNameChange(e.target.value)} placeholder="Application name" disabled={!isAdmin} />
                   <div className="flex items-center gap-2">
                     <Button onPress={saveBrandName} className="h-10" disabled={!isAdmin}>Save</Button>
-                    {!isAdmin && <span className="text-sm text-[var(--txt-secondary)]">Only admins can change branding.</span>}
+                    {!isAdmin && <span className="text-sm text-(--txt-secondary)">Only admins can change branding.</span>}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-[var(--txt-primary)]">Brand Color</p>
-                  <p className="text-sm text-[var(--txt-secondary)]">Choose a brand color using the color picker. This updates the --brand CSS variable.</p>
+                  <p className="font-medium text-(--txt-primary)">Brand Color</p>
+                  <p className="text-sm text-(--txt-secondary)">Choose a brand color using the color picker. This updates the --brand CSS variable.</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Input type="color" value={colorInputValue} onChange={(e) => handleBrandColorChange(e.target.value)} className="h-10 w-12 p-0" disabled={!isAdmin} />
                   <div className="flex items-center gap-2">
                     <Button onPress={saveBrandColor} className="h-10" disabled={!isAdmin}>Save</Button>
                     <Button variant="outline" onPress={resetBrandColor} className="h-10" disabled={!isAdmin}>Reset</Button>
-                    {!isAdmin && <span className="text-sm text-[var(--txt-secondary)]">Only admins can change branding.</span>}
+                    {!isAdmin && <span className="text-sm text-(--txt-secondary)">Only admins can change branding.</span>}
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-[var(--txt-primary)]">Brand Icon (256x256 PNG)</p>
-                  <p className="text-sm text-[var(--txt-secondary)]">Upload a 256x256 PNG to be used as an application icon.</p>
+                  <p className="font-medium text-(--txt-primary)">Brand Icon (256x256 PNG)</p>
+                  <p className="text-sm text-(--txt-secondary)">Upload a 256x256 PNG to be used as an application icon.</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex flex-col items-center">
-                    <div className="w-16 h-16 border border-border rounded overflow-hidden bg-[var(--bg-quaternary)] flex items-center justify-center">
-                      {brandIconPreview ? <img src={brandIconPreview} alt="icon preview" className="w-full h-full object-cover" /> : <span className="text-sm text-[var(--txt-secondary)]">No icon</span>}
+                    <div className="w-16 h-16 border border-border rounded overflow-hidden bg-(--bg-quaternary) flex items-center justify-center">
+                      {brandIconPreview ? <img src={brandIconPreview} alt="icon preview" className="w-full h-full object-cover" /> : <span className="text-sm text-(--txt-secondary)">No icon</span>}
                     </div>
                     <input type="file" accept="image/png" onChange={(e) => handleIconSelect(e.target.files && e.target.files[0])} disabled={!isAdmin} />
                   </div>
                   <div className="flex flex-col gap-2">
                     <Button onPress={uploadBrandIcon} className="h-10" disabled={!isAdmin}>Upload</Button>
-                    {!isAdmin && <span className="text-sm text-[var(--txt-secondary)]">Only admins can change branding.</span>}
+                    {!isAdmin && <span className="text-sm text-(--txt-secondary)">Only admins can change branding.</span>}
                   </div>
                 </div>
               </div>
@@ -844,7 +841,7 @@ const Settings = () => {
             <h2 className="text-2xl font-semibold flex items-center gap-2">
               <AlertTriangle className="h-6 w-6" /> Model Audit
             </h2>
-            <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-4">
+            <div className="bg-(--bg-secondary) border border-border rounded-lg p-6 space-y-4">
               <div className="flex gap-4 items-center flex-wrap">
                 <div className="flex items-center gap-2">
                   <Select
@@ -863,7 +860,7 @@ const Settings = () => {
                         {branches.map((b) => (
                           <ListBox.Item key={b} id={b} textValue={b}>
                             <span className="flex items-center gap-2">
-                              <GitBranch size={16} className="text-[var(--txt-secondary)]" />
+                              <GitBranch size={16} className="text-(--txt-secondary)" />
                               <span>{b}</span>
                             </span>
                           </ListBox.Item>
@@ -910,8 +907,8 @@ const Settings = () => {
 
               {auditIssues.length > 0 ? (
                 <div className="border border-border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm text-[var(--txt-primary)]">
-                    <thead className="bg-[var(--bg-tertiary)]">
+                  <table className="w-full text-sm text-(--txt-primary)">
+                    <thead className="bg-(--bg-tertiary)">
                       <tr>
                         <th className="p-3 text-left">Namespace</th>
                         <th className="p-3 text-left">Model</th>
@@ -920,7 +917,7 @@ const Settings = () => {
                     </thead>
                     <tbody>
                       {auditIssues.map((issue, idx) => (
-                        <tr key={idx} className="border-t border-border bg-[var(--bg-secondary)]">
+                        <tr key={idx} className="border-t border-border bg-(--bg-secondary)">
                           <td className="p-3">{issue.namespace}</td>
                           <td className="p-3">{issue.model_identifier}</td>
                           <td className="p-3 text-red-500">{issue.issue}</td>
@@ -945,9 +942,9 @@ const Settings = () => {
               </Button>
             </div>
 
-            <div className="border border-border rounded-lg overflow-x-auto bg-[var(--bg-secondary)]">
-              <table className="w-full text-sm text-[var(--txt-primary)]">
-                <thead className="bg-[var(--bg-tertiary)]">
+            <div className="border border-border rounded-lg overflow-x-auto bg-(--bg-secondary)">
+              <table className="w-full text-sm text-(--txt-primary)">
+                <thead className="bg-(--bg-tertiary)">
                 <tr>
                   <th className="p-4 text-left font-semibold">Username</th>
                   <th className="p-4 text-left font-semibold">Role</th>
@@ -999,7 +996,7 @@ const Settings = () => {
                 Refresh Status
               </Button>
             </div>
-            <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-6">
+            <div className="bg-(--bg-secondary) border border-border rounded-lg p-6 space-y-6">
               {isAdmin && (
                 <form onSubmit={handleAddServer} className="grid grid-cols-4 gap-4 items-end">
                   <TextField>
@@ -1041,13 +1038,15 @@ const Settings = () => {
             </div>
           </div>
         );
+      case 'github_backup':
+        return <GithubBackupSettings />;
       default:
         return null;
     }
   };
 
   return (
-    <div className={`min-h-screen bg-[var(--bg-primary)] text-[var(--txt-primary)] transition-colors ${isDark ? 'dark' : ''}`}>
+    <div className={`min-h-screen bg-(--bg-primary) text-(--txt-primary) transition-colors ${isDark ? 'dark' : ''}`}>
       <div className="max-w-7xl mx-auto p-6">
         <div className="flex items-center gap-4 mb-8">
           <Button variant="ghost" size="icon" onPress={() => navigate('/')}>
@@ -1066,8 +1065,8 @@ const Settings = () => {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-3 px-4 py-2 rounded-lg text-left transition-colors ${
                     activeTab === tab.id
-                      ? 'bg-[var(--bg-tertiary)] text-[var(--txt-primary)] font-semibold'
-                      : 'hover:bg-[var(--bg-secondary)] text-[var(--txt-secondary)]'
+                      ? 'bg-(--bg-tertiary) text-(--txt-primary) font-semibold'
+                      : 'hover:bg-(--bg-secondary) text-(--txt-secondary)'
                   }`}
                 >
                   <tab.icon className="h-5 w-5" />
@@ -1088,7 +1087,7 @@ const Settings = () => {
       <Modal isOpen={newUserOpen} onOpenChange={setNewUserOpen}>
         <Modal.Backdrop>
           <Modal.Container>
-            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+            <Modal.Dialog className="bg-(--bg-secondary) text-(--txt-primary)">
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Heading>Create New User</Modal.Heading>
@@ -1130,7 +1129,7 @@ const Settings = () => {
       <Modal isOpen={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
         <Modal.Backdrop>
           <Modal.Container>
-            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+            <Modal.Dialog className="bg-(--bg-secondary) text-(--txt-primary)">
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Heading>Update Profile</Modal.Heading>
@@ -1166,7 +1165,7 @@ const Settings = () => {
       <Modal isOpen={editUserOpen} onOpenChange={setEditUserOpen}>
         <Modal.Backdrop>
           <Modal.Container>
-            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+            <Modal.Dialog className="bg-(--bg-secondary) text-(--txt-primary)">
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Heading>Edit User</Modal.Heading>
@@ -1210,9 +1209,107 @@ const Settings = () => {
   );
 };
 
-/**
- * Los het probleem met hooks op door een eigen component te maken voor tag management.
- */
+function GithubBackupSettings() {
+  const [settings, setSettings] = useState({
+    repoUrl: '',
+    token: '',
+    enabled: false,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetchWithCreds(`${API_URL}/github/settings`);
+        if (response.ok) {
+          const data = await response.json();
+          setSettings(data);
+        }
+      } catch (error) {
+        console.error('Error fetching github settings:', error);
+        toast.danger('Failed to load GitHub settings');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      const response = await fetchWithCreds(`${API_URL}/github/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      if (response.ok) {
+        toast.success('GitHub settings saved');
+      } else {
+        const data = await response.json();
+        toast.danger(data.error || 'Failed to save settings');
+      }
+    } catch {
+      toast.danger('An error occurred while saving');
+    }
+  };
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-semibold flex items-center gap-2">
+        <Github className="h-6 w-6" /> GitHub Backup
+      </h2>
+      <div className="bg-(--bg-secondary) border border-border rounded-lg p-6 space-y-4">
+        <Switch
+          isSelected={settings.enabled}
+          onChange={(isSelected) => setSettings({ ...settings, enabled: isSelected })}
+          className="flex items-center justify-between"
+        >
+          <div>
+            <Label>Enable Backup</Label>
+            <p className="text-sm text-(--txt-secondary)">
+              Automatically back up branches and configuration to a GitHub repository.
+            </p>
+          </div>
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+        </Switch>
+
+        <TextField>
+          <Label>Repository URL</Label>
+          <Input
+            value={settings.repoUrl}
+            onChange={(e) => setSettings({ ...settings, repoUrl: e.target.value })}
+            placeholder="https://github.com/user/repo.git"
+            disabled={!settings.enabled}
+          />
+        </TextField>
+
+        <TextField>
+          <Label>Personal Access Token</Label>
+          <Input
+            type="password"
+            value={settings.token}
+            onChange={(e) => setSettings({ ...settings, token: e.target.value })}
+            placeholder="ghp_..."
+            disabled={!settings.enabled}
+          />
+        </TextField>
+        
+        <div className="flex justify-end">
+          <Button onPress={handleSave} disabled={!settings.enabled}>Save Settings</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
 function TagManagement({
   tags,
   groupedTags,
@@ -1232,7 +1329,7 @@ function TagManagement({
   const [editTagColor, setEditTagColor] = useState('#000000');
   const [editTagGroup, setEditTagGroup] = useState('');
 
-  // Handler voor tag bewerken
+  // Handler for editing a tag
   const handleEditTag = (tag) => {
     setTagToEdit(tag);
     setEditTagName(tag.tag);
@@ -1255,16 +1352,16 @@ function TagManagement({
         }),
       });
       if (response.ok) {
-        toast.success("Tag bijgewerkt");
+        toast.success("Tag updated");
         setEditTagModalOpen(false);
         setTagToEdit(null);
         await fetchTags();
       } else {
         const data = await response.json();
-        toast.danger(data.error || "Bijwerken mislukt");
+        toast.danger(data.error || "Update failed");
       }
-    } catch (error) {
-      toast.danger("Er is een fout opgetreden");
+    } catch {
+      toast.danger("An error occurred");
     }
   };
 
@@ -1273,7 +1370,7 @@ function TagManagement({
       <h2 className="text-2xl font-semibold flex items-center gap-2">
         <Tags className="h-6 w-6" /> Tag Management
       </h2>
-      <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-6">
+      <div className="bg-(--bg-secondary) border border-border rounded-lg p-6 space-y-6">
         <form onSubmit={handleCreateTag} className="flex gap-4 items-end flex-nowrap w-full">
           <TextField className="flex-1 min-w-0">
             <Label>Tag Name</Label>
@@ -1293,13 +1390,13 @@ function TagManagement({
         <div className="space-y-6">
           {Object.entries(groupedTags).map(([group, groupTags]) => (
             <div key={group}>
-              <div className="font-semibold text-[var(--txt-secondary)] mb-2">{group}</div>
+              <div className="font-semibold text-(--txt-secondary) mb-2">{group}</div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {groupTags.map((tag, index) => (
-                  <div key={tag.id || index} className="flex items-center justify-between p-3 border rounded-lg bg-[var(--bg-primary)]">
+                  <div key={tag.id || index} className="flex items-center justify-between p-3 border rounded-lg bg-(--bg-primary)">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: tag.color || '#808080' }}></div>
-                      <span className="text-[var(--txt-primary)]">{tag.tag}</span>
+                      <span className="text-(--txt-primary)">{tag.tag}</span>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="ghost" color="primary" onPress={() => handleEditTag(tag)}>
@@ -1319,30 +1416,29 @@ function TagManagement({
         </div>
       </div>
 
-      {/* Modal voor tag bewerken */}
       <Modal isOpen={editTagModalOpen} onOpenChange={setEditTagModalOpen}>
         <Modal.Backdrop>
           <Modal.Container>
-            <Modal.Dialog className="bg-[var(--bg-secondary)] text-[var(--txt-primary)]">
+            <Modal.Dialog className="bg-(--bg-secondary) text-(--txt-primary)">
               <Modal.CloseTrigger />
               <Modal.Header>
-                <Modal.Heading>Bewerk Tag</Modal.Heading>
+                <Modal.Heading>Edit Tag</Modal.Heading>
               </Modal.Header>
               <Modal.Body>
                 <form onSubmit={handleUpdateTag} className="space-y-4">
                   <TextField>
-                    <Label>Tag Naam</Label>
+                    <Label>Tag Name</Label>
                     <Input value={editTagName} onChange={e => setEditTagName(e.target.value)} required />
                   </TextField>
                   <TextField>
-                    <Label>Kleur</Label>
+                    <Label>Color</Label>
                     <Input type="color" value={editTagColor} onChange={e => setEditTagColor(e.target.value)} className="h-10 p-1" />
                   </TextField>
                   <TextField>
-                    <Label>Groep (optioneel)</Label>
+                    <Label>Group (optional)</Label>
                     <Input value={editTagGroup} onChange={e => setEditTagGroup(e.target.value)} />
                   </TextField>
-                  <Button type="submit" className="w-full">Opslaan</Button>
+                  <Button type="submit" className="w-full">Save</Button>
                 </form>
               </Modal.Body>
             </Modal.Dialog>

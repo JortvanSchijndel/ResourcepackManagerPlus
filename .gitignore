@@ -38,3 +38,5 @@ backend/config.yaml
 /plugin/ResourcepackManager/build/
 .aider*
 /backend/branding/
+/backend/github_config.yaml
+/backend/github_backup_repo/

@@ -105,7 +105,7 @@ const CategoryTree = ({ node, onSelect, selected, onAddSubcategory, onDelete, le
                             <div className="flex items-center flex-1 overflow-hidden">
                                 {(hasChildren || !__isLeaf) ? (
                                     <div 
-                                        className="p-0.5 rounded hover:bg-(--bg-transparent-hover) mr-1 flex-shrink-0"
+                                        className="p-0.5 rounded hover:bg-(--bg-transparent-hover) mr-1 shrink-0"
                                         onClick={(e) => { e.stopPropagation(); toggleExpand(__fullPath); }}
                                     >
                                         <ChevronRight 
@@ -113,11 +113,11 @@ const CategoryTree = ({ node, onSelect, selected, onAddSubcategory, onDelete, le
                                         />
                                     </div>
                                 ) : (
-                                    <div className="w-6 flex-shrink-0" />
+                                    <div className="w-6 shrink-0" />
                                 )}
                                 <span className="truncate">{key}</span>
                             </div>
-                            <div className="opacity-0 group-hover:opacity-100 flex items-center flex-shrink-0 gap-1">
+                            <div className="opacity-0 group-hover:opacity-100 flex items-center shrink-0 gap-1">
                                 {allowAdd && (
                                     <button 
                                         className="p-1 rounded hover:bg-(--bg-transparent-hover) text-primary"
@@ -245,8 +245,6 @@ export const CategorySelector = ({
                     }
                 }
                 toast.success(`Category "${fullPath}" added.`);
-            } catch (e) {
-                // Error toast is handled in the modal
             } finally {
                 setLoading(false);
             }
@@ -314,9 +312,9 @@ export const CategorySelector = ({
                     align="start"
                     sideOffset={6}
                     className="
-                        z-50 w-[var(--radix-dropdown-menu-trigger-width)] min-w-64 p-1
+                        z-50 w-(--radix-dropdown-menu-trigger-width) min-w-64 p-1
                         bg-(--bg-tertiary)
-                        rounded-(--radius) shadow-xl
+                        rounded-lg shadow-xl
                         text-(--txt-primary)
                         border border-border
                         max-h-80 overflow-y-auto

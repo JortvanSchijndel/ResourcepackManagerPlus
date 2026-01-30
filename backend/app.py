@@ -6,7 +6,7 @@ import os
 import json
 import shutil
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import base64
 import yaml
@@ -17,7 +17,10 @@ import requests
 import uuid
 import logging
 import io
+import threading
 from dotenv import load_dotenv
+from apscheduler.schedulers.background import BackgroundScheduler
+from github_backup import load_settings as load_github_settings, save_settings as save_github_settings, backup_to_github
 
 # Load environment variables
 load_dotenv()
@@ -50,6 +53,37 @@ TEMP_DIR.mkdir(exist_ok=True)
 for branch in ["dev", "prod"]:
     initial_branch_path = BRANCHES_DIR / branch
     initial_branch_path.mkdir(parents=True, exist_ok=True)
+
+# --- Background Tasks ---
+def trigger_backup():
+    """Triggers the GitHub backup in a new thread."""
+    try:
+        thread = threading.Thread(target=backup_to_github)
+        thread.start()
+    except Exception as e:
+        logging.error(f"Failed to start backup thread: {e}")
+
+def cleanup_temp_folder():
+    """Deletes files in the temp folder older than 1 hour."""
+    logging.info("Running temp folder cleanup...")
+    now = datetime.now()
+    for f in TEMP_DIR.iterdir():
+        try:
+            file_mod_time = datetime.fromtimestamp(f.stat().st_mtime)
+            if now - file_mod_time > timedelta(hours=1):
+                if f.is_file():
+                    f.unlink()
+                elif f.is_dir():
+                    shutil.rmtree(f)
+                logging.info(f"Removed old temp file/dir: {f.name}")
+        except Exception as e:
+            logging.error(f"Error cleaning up temp file {f.name}: {e}")
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(cleanup_temp_folder, 'interval', hours=1)
+scheduler.add_job(backup_to_github, 'interval', minutes=30)
+scheduler.start()
+# --- End Background Tasks ---
 
 # Login Manager Setup
 login_manager = LoginManager()
@@ -92,6 +126,7 @@ def load_users():
 def save_users(users_data):
     with open(USERS_FILE, 'w') as f:
         yaml.dump(users_data, f)
+    trigger_backup()
 
 
 @login_manager.user_loader
@@ -113,6 +148,7 @@ def load_servers():
 def save_servers(servers_data):
     with open(SERVERS_FILE, 'w') as f:
         yaml.dump(servers_data, f)
+    trigger_backup()
 
 
 # Heartbeat
@@ -496,6 +532,7 @@ def load_config():
 def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
         yaml.dump(config, f)
+    trigger_backup()
 
 
 def calculate_file_hash(file_path):
@@ -561,7 +598,8 @@ def create_branch():
                 return jsonify({"error": f"Source branch '{copy_from}' not found"}), 404
         else:
             branch_path.mkdir(parents=True, exist_ok=True)
-
+        
+        trigger_backup()
         return jsonify({"success": True, "message": f"Branch '{branch_name}' created"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -580,6 +618,7 @@ def delete_branch(branch_name):
 
     try:
         shutil.rmtree(branch_path)
+        trigger_backup()
         return jsonify({"success": True, "message": f"Branch '{branch_name}' deleted"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -724,7 +763,8 @@ def update_thumbnail(branch_name, namespace, model_identifier):
         
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-            
+        
+        trigger_backup()
         return jsonify({"success": True, "message": "Thumbnail updated"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -904,7 +944,8 @@ def upload_model(branch_name):
 
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-
+        
+        trigger_backup()
         return jsonify({
             "success": True,
             "message": f"Model saved to {category_path}:{model_identifier}",
@@ -1098,7 +1139,8 @@ def approve_model(branch_name, namespace, model_identifier):
 
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-
+        
+        trigger_backup()
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1139,7 +1181,8 @@ def add_comment(branch_name, namespace, model_identifier):
 
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-
+        
+        trigger_backup()
         return jsonify({"success": True, "comments": comments})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1191,7 +1234,8 @@ def delete_model(branch_name, namespace, model_identifier):
     cleanup_empty_dirs(models_dir.parent, branch_path / "assets")
     cleanup_empty_dirs(textures_dir.parent, branch_path / "assets")
     cleanup_empty_dirs(item_def.parent, branch_path / "assets")
-
+    
+    trigger_backup()
     return jsonify({"success": True, "message": "Model deleted"})
 
 
@@ -1435,6 +1479,7 @@ def merge_branches():
             if target_path.exists():
                 shutil.rmtree(target_path)
             shutil.copytree(source_path, target_path)
+            trigger_backup()
             return jsonify({
                 "success": True,
                 "message": f"Merged {source} → {target} (Full Overwrite)",
@@ -1474,6 +1519,9 @@ def merge_branches():
             except Exception as e:
                 print(f"Error processing {path}: {e}")
                 error_count += 1
+        
+        if success_count > 0:
+            trigger_backup()
 
         return jsonify({
             "success": True,
@@ -2005,6 +2053,7 @@ def save_file_content():
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
+        trigger_backup()
         return jsonify({"success": True, "message": "File saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2038,7 +2087,8 @@ def create_file_or_folder():
         else:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.touch()
-
+        
+        trigger_backup()
         return jsonify({"success": True, "message": f"{'Folder' if is_folder else 'File'} created"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2070,7 +2120,8 @@ def delete_file_or_folder():
             shutil.rmtree(target_path)
         else:
             target_path.unlink()
-
+        
+        trigger_backup()
         return jsonify({"success": True, "message": "Deleted successfully"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2097,6 +2148,7 @@ def upload_file():
     try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         file.save(target_path)
+        trigger_backup()
         return jsonify({"success": True, "message": "File uploaded"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2132,13 +2184,34 @@ def rename_file():
     try:
         new_file_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(old_file_path), str(new_file_path))
+        trigger_backup()
         return jsonify({"success": True, "message": "Renamed successfully"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# GitHub Backup Routes
+@app.route('/api/github/settings', methods=['GET'])
+@login_required
+def get_github_settings():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(load_github_settings())
+
+@app.route('/api/github/settings', methods=['POST'])
+@login_required
+def set_github_settings():
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+    settings = request.json
+    save_github_settings(settings)
+    trigger_backup()
+    return jsonify({"success": True, "message": "Settings saved."})
 
 
 if __name__ == '__main__':
     host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('DEBUG', 'True').lower() == 'true'
-    app.run(host=host, debug=debug, port=port, use_reloader=False)
+    debug = os.getenv('DEBUG', 'True') == 'true'
+    extra_dirs = [str(d) for d in [BRANCHES_DIR, BRANDING_DIR] if d.exists()]
+    extra_files = extra_dirs + [str(f) for f in [CONFIG_FILE, USERS_FILE, SERVERS_FILE] if f.exists()]
+    app.run(host=host, debug=debug, port=port, use_reloader=debug, extra_files=extra_files)
