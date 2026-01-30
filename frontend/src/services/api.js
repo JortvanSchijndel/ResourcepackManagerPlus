@@ -69,7 +69,7 @@ export const api = {
 
   getModelDetail: async (branch, namespace, modelIdentifier) => {
     const response = await fetchWithCreds(
-      `${API_URL}/model/${branch}/${namespace}/${modelIdentifier}`
+      `${API_URL}/model/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}`
     );
     return response.json();
   },
@@ -84,7 +84,7 @@ export const api = {
 
   updateModel: async (branch, namespace, modelIdentifier, formData) => {
     const response = await fetchWithCreds(
-      `${API_URL}/model/${branch}/${namespace}/${modelIdentifier}`, 
+      `${API_URL}/model/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}`, 
       {
         method: 'POST',
         body: formData,
@@ -95,7 +95,7 @@ export const api = {
 
   deleteModel: async (branch, namespace, modelIdentifier) => {
     const response = await fetchWithCreds(
-      `${API_URL}/model/${branch}/${namespace}/${modelIdentifier}`,
+      `${API_URL}/model/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}`,
       { method: 'DELETE' }
     );
     return response.json();
@@ -112,7 +112,7 @@ export const api = {
 
   approveModel: async (branch, namespace, modelIdentifier) => {
     const response = await fetchWithCreds(
-      `${API_URL}/model/${branch}/${namespace}/${modelIdentifier}/approve`,
+      `${API_URL}/model/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}/approve`,
       { method: 'POST' }
     );
     return response.json();
@@ -120,7 +120,7 @@ export const api = {
 
   addComment: async (branch, namespace, modelIdentifier, text) => {
     const response = await fetchWithCreds(
-      `${API_URL}/model/${branch}/${namespace}/${modelIdentifier}/comment`,
+      `${API_URL}/model/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}/comment`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,7 +132,41 @@ export const api = {
 
   // Namespaces (Categories)
   getNamespaces: async () => {
-    const response = await fetchWithCreds(`${API_URL}/namespaces`);
+    // New primary endpoint returns configured categories + discovered namespaces
+    const response = await fetchWithCreds(`${API_URL}/categories`);
+    const data = await response.json().catch(() => null);
+
+    // Backwards-compat: some servers may still expose /namespaces
+    if (!data || (!data.categories && !data.namespaces)) {
+      const fallback = await fetchWithCreds(`${API_URL}/namespaces`).catch(() => null);
+      const fbData = fallback ? await fallback.json().catch(() => null) : null;
+      if (fbData && fbData.namespaces) {
+        return { namespaces: fbData.namespaces, categories: fbData.namespaces };
+      }
+      return { namespaces: [], categories: [] };
+    }
+
+    const cats = data.categories || data.namespaces || [];
+    return { namespaces: cats, categories: cats };
+  },
+
+  // Create a new category (server-side + config)
+  createCategory: async (category) => {
+    const response = await fetchWithCreds(`${API_URL}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category }),
+    });
+    return response.json();
+  },
+
+  // Delete a configured category (server-side only; does not remove files)
+  deleteCategory: async (category) => {
+    const response = await fetchWithCreds(`${API_URL}/categories`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category }),
+    });
     return response.json();
   },
 
@@ -167,7 +201,7 @@ export const api = {
   // Downloads
   downloadBBModel: (branch, namespace, modelIdentifier) => {
     window.open(
-      `${API_URL}/download/bbmodel/${branch}/${namespace}/${modelIdentifier}`,
+      `${API_URL}/download/bbmodel/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}`,
       '_blank'
     );
   },
@@ -286,7 +320,7 @@ export const api = {
 
   // Thumbnails
   getThumbnail: (branch, namespace, modelIdentifier) => {
-    return `${API_URL}/thumbnail/${branch}/${namespace}/${modelIdentifier}.png`;
+    return `${API_URL}/thumbnail/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}.png`;
   },
 
   // Audit
@@ -299,7 +333,7 @@ export const api = {
     const formData = new FormData();
     formData.append('thumbnail', thumbnailBlob, 'thumbnail.png');
     const response = await fetchWithCreds(
-      `${API_URL}/model/${branch}/${namespace}/${modelIdentifier}/thumbnail`,
+      `${API_URL}/model/${branch}/${encodeURIComponent(namespace)}/${encodeURIComponent(modelIdentifier)}/thumbnail`,
       {
         method: 'POST',
         body: formData,

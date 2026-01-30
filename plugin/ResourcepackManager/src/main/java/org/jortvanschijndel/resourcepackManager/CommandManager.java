@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CommandManager implements CommandExecutor, TabCompleter {
 
@@ -52,7 +53,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                                 "<dark_gray>»</dark_gray> <gold>/rmp status</gold> <dark_gray>-</dark_gray> <gray>Shows the current status.</gray><br>" +
                                 "<dark_gray>»</dark_gray> <gold>/rmp seturl <url></gold> <dark_gray>-</dark_gray> <gray>Sets the allowed URL for resource packs.</gray><br>" +
                                 "<dark_gray>»</dark_gray> <gold>/rmp debug</gold> <dark_gray>-</dark_gray> <gray>Toggles debug mode.</gray><br>" +
-                                "<dark_gray>»</dark_gray> <gold>/rmp give-model <item> <category> <model></gold> <dark_gray>-</dark_gray> <gray>Gives a custom model.</gray><br>" +
+                                "<dark_gray>»</dark_gray> <gold>/rmp give-model <item> <namespace> <model_identifier></gold> <dark_gray>-</dark_gray> <gray>Gives a custom model.</gray><br>" +
                                 "<dark_gray>»</dark_gray> <gold>/rmp model-viewer [search]</gold> <dark_gray>-</dark_gray> <gray>Opens the model viewer GUI.</gray>"
                 );
                 sender.sendMessage(parsed);
@@ -109,30 +110,25 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 3) {
-            sender.sendMessage(miniMessage.deserialize("<red>Usage: /give-model <item> <category> <model></red>"));
+            sender.sendMessage(miniMessage.deserialize("<red>Usage: /give-model <item> <namespace> <model_identifier></red>"));
             return;
         }
 
         String itemName = args[0];
-        String category = args[1];
-        String modelName = args[2];
+        String namespace = args[1];
+        String modelIdentifier = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
 
-        List<String> matchingModels = plugin.getPackInspector().getModels(category).stream()
-                .filter(s -> s.substring(s.lastIndexOf('/') + 1).equalsIgnoreCase(modelName))
+        List<String> matchingModels = plugin.getPackInspector().getModels(namespace).stream()
+                .filter(s -> s.equalsIgnoreCase(modelIdentifier))
                 .toList();
 
         if (matchingModels.isEmpty()) {
-            sender.sendMessage(miniMessage.deserialize("<red>Model not found: " + modelName + "</red>"));
+            sender.sendMessage(miniMessage.deserialize("<red>Model not found: " + modelIdentifier + "</red>"));
             return;
         }
 
-        if (matchingModels.size() > 1) {
-            sender.sendMessage(miniMessage.deserialize("<red>Ambiguous model name. Multiple models found: " + matchingModels + "</red>"));
-            return;
-        }
-
-        String modelPath = matchingModels.getFirst();
-        String shortModelName = modelPath.substring(modelPath.lastIndexOf('/') + 1);
+        // Convert back to path format for NamespacedKey
+        String modelPath = matchingModels.get(0).replace(":", "/");
 
         Material material = Material.matchMaterial(itemName);
         if (material == null) {
@@ -144,10 +140,10 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             try {
-                meta.setItemModel(new NamespacedKey(category, shortModelName));
+                meta.setItemModel(new NamespacedKey(namespace, modelPath));
                 item.setItemMeta(meta);
             } catch (IllegalArgumentException e) {
-                sender.sendMessage(miniMessage.deserialize("<red>Invalid namespace or key: " + category + ":" + shortModelName + "</red>"));
+                sender.sendMessage(miniMessage.deserialize("<red>Invalid namespace or key: " + namespace + ":" + modelPath + "</red>"));
                 return;
             }
         }
@@ -172,13 +168,12 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return plugin.getPackInspector().getNamespaces().stream()
                     .filter(s -> s.startsWith(args[1].toLowerCase()))
                     .toList();
-        } else if (args.length == 3) {
-            String category = args[1];
-            return plugin.getPackInspector().getModels(category).stream()
-                    .map(s -> s.substring(s.lastIndexOf('/') + 1))
-                    .filter(s -> s.startsWith(args[2].toLowerCase()))
-                    .distinct()
-                    .toList();
+        } else if (args.length >= 3) {
+            String namespace = args[1];
+            String currentInput = String.join(" ", Arrays.copyOfRange(args, 2, args.length)).toLowerCase();
+            return plugin.getPackInspector().getModels(namespace).stream()
+                    .filter(s -> s.toLowerCase().startsWith(currentInput))
+                    .collect(Collectors.toList());
         }
         return Collections.emptyList();
     }

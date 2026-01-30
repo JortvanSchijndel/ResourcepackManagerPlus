@@ -13,6 +13,7 @@ import { Upload } from 'lucide-react';
 import { MinecraftModel } from '../3d/MinecraftModel';
 import { TagSelector } from '../form/TagSelector';
 import { CategorySelector } from '../form/CategorySelector';
+import { api } from '../../services/api';
 
 const SceneCapture = ({ onRegister }) => {
   const { gl, scene, camera } = useThree();
@@ -35,7 +36,9 @@ export const UploadModal = ({
                               onUpload,
                               categories,
                               loading,
-                              existingModels
+                              existingModels,
+                              onAddCategory,
+                              onDeleteCategory
                             }) => {
   const [uploadCategory, setUploadCategory] = useState('');
   const [uploadModelName, setUploadModelName] = useState('');
@@ -45,14 +48,9 @@ export const UploadModal = ({
   const [isIdentifierTouched, setIsIdentifierTouched] = useState(false);
   const [uploadPreview, setUploadPreview] = useState(null);
   const [bbmodelData, setBbmodelData] = useState(null);
-  const [localCategories, setLocalCategories] = useState(categories);
   const [selectedTags, setSelectedTags] = useState([]);
   const [identifierError, setIdentifierError] = useState('');
   const captureThumbnailRef = useRef(null);
-
-  useEffect(() => {
-    setLocalCategories(categories);
-  }, [categories]);
 
   useEffect(() => {
     if (show) {
@@ -159,19 +157,24 @@ export const UploadModal = ({
     onUpload(formData);
   };
 
-  const handleAddCategory = (name) => {
-    const filtered = name.replace(/[^a-z0-9_-]/gi, '');
-    if (!filtered) {
-      toast.danger('Category must contain only letters, numbers, underscores, and hyphens');
-      return;
-    }
-    setLocalCategories(prev => [...prev, filtered]);
-    setUploadCategory(filtered);
+  const handleAddCategoryWrapper = async (name) => {
+      if (onAddCategory) {
+          const res = await onAddCategory(name);
+          if (res && res.success) {
+              setUploadCategory(name);
+          }
+          return res;
+      }
   };
 
-  const handleDeleteCategory = (name) => {
-    setLocalCategories(prev => prev.filter(c => c !== name));
-    if (uploadCategory === name) setUploadCategory('');
+  const handleDeleteCategoryWrapper = async (name) => {
+      if (onDeleteCategory) {
+          const res = await onDeleteCategory(name);
+          if (res && res.success && uploadCategory === name) {
+              setUploadCategory('');
+          }
+          return res;
+      }
   };
 
   if (!show) return null;
@@ -279,9 +282,9 @@ export const UploadModal = ({
                 <CategorySelector
                     value={uploadCategory}
                     onChange={setUploadCategory}
-                    options={localCategories}
-                    onAdd={handleAddCategory}
-                    onDelete={handleDeleteCategory}
+                    options={categories}
+                    onAdd={handleAddCategoryWrapper}
+                    onDelete={handleDeleteCategoryWrapper}
                 />
 
                 {/* Model Identifier */}

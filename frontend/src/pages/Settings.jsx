@@ -94,6 +94,7 @@ const Settings = () => {
   const [auditIssues, setAuditIssues] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
+  const [regeneratingAllThumbnails, setRegeneratingAllThumbnails] = useState(false);
   const [currentThumbnailModel, setCurrentThumbnailModel] = useState(null);
   const captureThumbnailRef = useRef(null);
 
@@ -487,6 +488,61 @@ const Settings = () => {
     runAudit();
   };
 
+  const handleRegenerateAllThumbnails = async () => {
+    if (!selectedAuditBranch) {
+      toast.danger("Select a branch first.");
+      return;
+    }
+    if (!confirm('Are you sure you want to regenerate ALL thumbnails for this branch? This can take a long time and cannot be undone.')) {
+        return;
+    }
+
+    setRegeneratingAllThumbnails(true);
+    
+    try {
+        const modelsData = await api.getModels(selectedAuditBranch);
+        const allModels = modelsData.models || [];
+
+        if (allModels.length === 0) {
+            toast.info("No models found in this branch.");
+            setRegeneratingAllThumbnails(false);
+            return;
+        }
+
+        toast.info(`Starting thumbnail regeneration for ${allModels.length} models. Please wait...`);
+
+        for (const modelInfo of allModels) {
+          try {
+            const modelData = await api.getModelDetail(selectedAuditBranch, modelInfo.namespace, modelInfo.model_identifier);
+            setCurrentThumbnailModel(modelData);
+            
+            // Give React time to render the model before capturing
+            await new Promise(resolve => setTimeout(resolve, 500)); 
+            
+            if (captureThumbnailRef.current) {
+                const dataUrl = captureThumbnailRef.current();
+                const res = await fetch(dataUrl);
+                const blob = await res.blob();
+                
+                await api.updateThumbnail(selectedAuditBranch, modelInfo.namespace, modelInfo.model_identifier, blob);
+            }
+          } catch (e) {
+            console.error(`Failed to generate thumbnail for ${modelInfo.namespace}:${modelInfo.model_identifier}`, e);
+            toast.danger(`Failed for ${modelInfo.model_identifier}`);
+          }
+        }
+        
+        toast.success("All thumbnails have been regenerated successfully.");
+
+    } catch (error) {
+        console.error("Failed to fetch models for thumbnail regeneration:", error);
+        toast.danger("Could not fetch model list for regeneration.");
+    } finally {
+        setCurrentThumbnailModel(null);
+        setRegeneratingAllThumbnails(false);
+    }
+  };
+
   // Branding helpers
   const applyBrandColor = (color) => {
     try {
@@ -789,14 +845,14 @@ const Settings = () => {
               <AlertTriangle className="h-6 w-6" /> Model Audit
             </h2>
             <div className="bg-[var(--bg-secondary)] border border-border rounded-lg p-6 space-y-4">
-              <div className="flex gap-4 items-center">
+              <div className="flex gap-4 items-center flex-wrap">
                 <div className="flex items-center gap-2">
                   <Select
                     className="w-[220px] select--primary"
                     placeholder="Select branch"
                     selectedKey={selectedAuditBranch || ''}
                     onSelectionChange={setSelectedAuditBranch}
-                    isDisabled={branchesLoading}
+                    isDisabled={branchesLoading || auditLoading || generatingThumbnails || regeneratingAllThumbnails}
                   >
                     <Select.Trigger className="select__trigger flex items-center gap-2">
                       <Select.Value />
@@ -816,13 +872,17 @@ const Settings = () => {
                     </Select.Popover>
                   </Select>
                 </div>
-                <Button onPress={runAudit} disabled={auditLoading || !selectedAuditBranch}>
+                <Button onPress={runAudit} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || !selectedAuditBranch}>
                   {auditLoading ? 'Scanning...' : 'Scan for Issues'}
                 </Button>
+                <Button onPress={handleRegenerateAllThumbnails} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || !selectedAuditBranch}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    {regeneratingAllThumbnails ? 'Regenerating...' : 'Regenerate All'}
+                </Button>
                 {auditIssues.some(i => i.issue === "Missing thumbnail") && (
-                  <Button onPress={generateThumbnails} disabled={generatingThumbnails || !selectedAuditBranch}>
+                  <Button onPress={generateThumbnails} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || !selectedAuditBranch}>
                     <ImageIcon className="mr-2 h-4 w-4" />
-                    {generatingThumbnails ? 'Generating...' : 'Generate Missing Thumbnails'}
+                    {generatingThumbnails ? 'Generating...' : `Generate Missing (${auditIssues.filter(i => i.issue === "Missing thumbnail").length})`}
                   </Button>
                 )}
               </div>

@@ -3,8 +3,9 @@ import { Modal, Button, TextField, Label, Input, toast } from '@heroui/react';
 import { Upload } from 'lucide-react';
 import { CategorySelector } from '../form/CategorySelector';
 import { TagSelector } from '../form/TagSelector';
+import { api } from '../../services/api';
 
-export const EditModelModal = ({ show, model, categories, onClose, onSave, loading }) => {
+export const EditModelModal = ({ show, model, categories, onClose, onSave, loading, onAddCategory, onDeleteCategory }) => {
   const [editCategory, setEditCategory] = useState('');
   const [editName, setEditName] = useState('');
   const [editIdentifier, setEditIdentifier] = useState('');
@@ -43,21 +44,24 @@ export const EditModelModal = ({ show, model, categories, onClose, onSave, loadi
     onSave(formData);
   };
 
-  const handleAddCategory = (name) => {
-    const filtered = name.replace(/[^a-z0-9_-]/gi, '');
-    if (!filtered) {
-      toast.danger('Category must contain only letters, numbers, underscores, and hyphens');
-      return;
-    }
-    // This logic should be handled by the parent component
-    // setLocalCategories(prev => [...prev, filtered]);
-    setEditCategory(filtered);
+  const handleAddCategoryWrapper = async (name) => {
+      if (onAddCategory) {
+          const res = await onAddCategory(name);
+          if (res && res.success) {
+              setEditCategory(name);
+          }
+          return res;
+      }
   };
 
-  const handleDeleteCategory = (name) => {
-    // This logic should be handled by the parent component
-    // setLocalCategories(prev => prev.filter(c => c !== name));
-    if (editCategory === name) setEditCategory('');
+  const handleDeleteCategoryWrapper = async (name) => {
+      if (onDeleteCategory) {
+          const res = await onDeleteCategory(name);
+          if (res && res.success && editCategory === name) {
+              setEditCategory('');
+          }
+          return res;
+      }
   };
 
   return (
@@ -127,8 +131,8 @@ export const EditModelModal = ({ show, model, categories, onClose, onSave, loadi
                     value={editCategory}
                     onChange={setEditCategory}
                     options={categories}
-                    onAdd={handleAddCategory}
-                    onDelete={handleDeleteCategory}
+                    onAdd={handleAddCategoryWrapper}
+                    onDelete={handleDeleteCategoryWrapper}
                 />
 
                 <TextField>

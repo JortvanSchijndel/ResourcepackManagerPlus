@@ -401,7 +401,7 @@ export const TagSelector = ({ selectedTags, onChange, label = 'Tags' }) => {
         toast.success('Tag deleted successfully!');
       }
     } catch (err)
- {
+    {
       toast.danger('Failed to delete tag: ' + err.message);
     }
   };
@@ -501,23 +501,23 @@ export const TagSelector = ({ selectedTags, onChange, label = 'Tags' }) => {
             data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95
           "
           >
-              <>
-                <DropdownMenu.Item
-                    onSelect={() => setShowAddModal(true)}
-                    className="
+            <>
+              <DropdownMenu.Item
+                  onSelect={() => setShowAddModal(true)}
+                  className="
                   flex items-center gap-2
                   px-2 py-1.5 text-sm
                   text-primary rounded-md
                   cursor-pointer
                   hover:bg-(--bg-transparent-hover) text-(--txt-primary)
                 "
-                >
-                  <Plus size={14} />
-                  Create New Tag
-                </DropdownMenu.Item>
+              >
+                <Plus size={14} />
+                Create New Tag
+              </DropdownMenu.Item>
 
-                <DropdownMenu.Separator className="my-1 h-px bg-muted" />
-              </>
+              <DropdownMenu.Separator className="my-1 h-px bg-muted" />
+            </>
 
             {/* GROUPS */}
             {Object.keys(grouped).sort().map(groupName => (
@@ -539,9 +539,9 @@ export const TagSelector = ({ selectedTags, onChange, label = 'Tags' }) => {
                     <DropdownMenu.Root>
                       <DropdownMenu.Trigger asChild>
                         <button
-                          onClick={(e) => { e.stopPropagation(); }}
-                          className="ml-2 p-1 rounded hover:bg-(--bg-transparent-hover)"
-                          aria-label="Group menu"
+                            onClick={(e) => { e.stopPropagation(); }}
+                            className="ml-2 p-1 rounded hover:bg-(--bg-transparent-hover)"
+                            aria-label="Group menu"
                         >
                           <MoreHorizontal size={16} />
                         </button>
@@ -575,91 +575,91 @@ export const TagSelector = ({ selectedTags, onChange, label = 'Tags' }) => {
                     </DropdownMenu.Root>
                   </div>
 
-                    {/* SUB MENU tags inside group */}
-                    <DropdownMenu.SubContent
-                        sideOffset={6}
-                        className="
+                  {/* SUB MENU tags inside group */}
+                  <DropdownMenu.SubContent
+                      sideOffset={6}
+                      className="
                   z-50 min-w-60 w-60 p-1 right-1 relative
                   bg-(--bg-tertiary)
                   rounded-(--radius) shadow-xl text-(--txt-primary)
                 "
-                    >
-                      {grouped[groupName].map(tag => (
-                          <div key={tag.id} className="flex items-center justify-between">
-                            <div
-                                onClick={() => toggleTag(tag.id)}
-                                className="
+                  >
+                    {grouped[groupName].map(tag => (
+                        <div key={tag.id} className="flex items-center justify-between">
+                          <div
+                              onClick={() => toggleTag(tag.id)}
+                              className="
                               flex items-center justify-between
                               px-2 py-1.5 text-sm
                               text-primary rounded-md
                               cursor-pointer
                               hover:bg-(--bg-transparent-hover)
                             "
-                            >
-                              <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    readOnly
-                                    checked={selectedTags.includes(tag.id)}
-                                    className="accent-primary"
-                                />
-                                {tag.color && (
-                                    <span
-                                        className="w-3 h-3 rounded-full border border-border"
-                                        style={{ backgroundColor: tag.color }}
-                                    />
-                                )}
-                                <span>{tag.name}</span>
-                              </div>
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                  type="checkbox"
+                                  readOnly
+                                  checked={selectedTags.includes(tag.id)}
+                                  className="accent-primary"
+                              />
+                              {tag.color && (
+                                  <span
+                                      className="w-3 h-3 rounded-full border border-border"
+                                      style={{ backgroundColor: tag.color }}
+                                  />
+                              )}
+                              <span>{tag.name}</span>
                             </div>
+                          </div>
 
-                            <DropdownMenu.Root>
-                              <DropdownMenu.Trigger asChild>
-                                <button onClick={(e) => { e.stopPropagation(); }} className="ml-2 p-1 rounded hover:bg-(--bg-transparent-hover)" aria-label="Tag menu">
-                                  <MoreHorizontal size={14} />
-                                </button>
-                              </DropdownMenu.Trigger>
-                              <DropdownMenu.Content className="z-50 w-48 p-1 bg-(--bg-tertiary) rounded-(--radius) shadow-xl text-(--txt-primary)">
-                                {isAdmin && (
-                                    <DropdownMenu.Item
-                                        className="
+                          <DropdownMenu.Root>
+                            <DropdownMenu.Trigger asChild>
+                              <button onClick={(e) => { e.stopPropagation(); }} className="ml-2 p-1 rounded hover:bg-(--bg-transparent-hover)" aria-label="Tag menu">
+                                <MoreHorizontal size={14} />
+                              </button>
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Content className="z-50 w-48 p-1 bg-(--bg-tertiary) rounded-(--radius) shadow-xl text-(--txt-primary)">
+                              {isAdmin && (
+                                  <DropdownMenu.Item
+                                      className="
                                         flex items-center gap-2
                                         px-2 py-1.5 text-sm
                                         text-secondary rounded-md
                                         cursor-pointer
                                         hover:bg-(--bg-transparent-hover)
                                       "
-                                        onSelect={() => {
-                                          setTagToEdit(tag);
-                                          setShowEditModal(true);
-                                        }}
-                                    >
-                                      <Pencil size={14} /> Edit Tag
-                                    </DropdownMenu.Item>
-                                )}
-                                {isAdmin && (
-                                    <DropdownMenu.Item
-                                        className="
+                                      onSelect={() => {
+                                        setTagToEdit(tag);
+                                        setShowEditModal(true);
+                                      }}
+                                  >
+                                    <Pencil size={14} /> Edit Tag
+                                  </DropdownMenu.Item>
+                              )}
+                              {isAdmin && (
+                                  <DropdownMenu.Item
+                                      className="
                                         flex items-center gap-2
                                         px-2 py-1.5 text-sm
                                         text-danger rounded-md
                                         cursor-pointer
                                         hover:bg-(--bg-transparent-hover)
                                       "
-                                        onSelect={() => {
-                                          void handleDeleteTag(null, tag);
+                                      onSelect={() => {
+                                        void handleDeleteTag(null, tag);
 
-                                        }}
-                                    >
-                                      <Trash2 size={14} /> Delete Tag
-                                    </DropdownMenu.Item>
-                                )}
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Root>
-                          </div>
-                      ))}
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Sub>
+                                      }}
+                                  >
+                                    <Trash2 size={14} /> Delete Tag
+                                  </DropdownMenu.Item>
+                              )}
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Root>
+                        </div>
+                    ))}
+                  </DropdownMenu.SubContent>
+                </DropdownMenu.Sub>
             ))}
 
             {/* UNGROUPED */}

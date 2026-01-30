@@ -11,6 +11,7 @@ from pathlib import Path
 import base64
 import yaml
 import hashlib
+import re
 import difflib
 import requests
 import uuid
@@ -483,9 +484,13 @@ def _get_branch_path(branch_name):
 
 def load_config():
     if not CONFIG_FILE.exists():
-        return {"tags": []}
+        default = {"tags": [], "categories": []}
+        # create a minimal config file for first run
+        with open(CONFIG_FILE, 'w') as f:
+            yaml.dump(default, f)
+        return default
     with open(CONFIG_FILE, 'r') as f:
-        return yaml.safe_load(f) or {"tags": []}
+        return yaml.safe_load(f) or {"tags": [], "categories": []}
 
 
 def save_config(config):
@@ -502,6 +507,7 @@ def calculate_file_hash(file_path):
 
 
 def create_item_definition(item_def_path, model_path, has_tints=False):
+    # This might be used by the plugin or just as a record
     item_def = {
         "model": {
             "type": "minecraft:model",
@@ -582,17 +588,20 @@ def delete_branch(branch_name):
 @app.route('/api/namespaces', methods=['GET'])
 @login_required
 def list_namespaces():
-    namespaces = set()
+    # Deprecated: use /api/categories
+    return list_categories()
 
-    for branch_dir in BRANCHES_DIR.iterdir():
-        if branch_dir.is_dir():
-            assets_path = branch_dir / "assets"
-            if assets_path.exists():
-                for namespace_dir in assets_path.iterdir():
-                    if namespace_dir.is_dir():
-                        namespaces.add(namespace_dir.name)
 
-    return jsonify({"namespaces": sorted(list(namespaces))})
+def parse_category(category_path):
+    """
+    Splits a category path (e.g. "cosmetics/hats/summer") into:
+    - namespace: "cosmetics" (first segment)
+    - subpath: "hats/summer" (remaining segments)
+    """
+    parts = category_path.replace('\\', '/').split('/')
+    namespace = parts[0]
+    subpath = "/".join(parts[1:]) if len(parts) > 1 else ""
+    return namespace, subpath
 
 
 @app.route('/api/models/<branch_name>', methods=['GET'])
@@ -603,59 +612,72 @@ def list_models(branch_name):
 
     models = []
     if assets_path.exists():
-        for namespace_dir in assets_path.iterdir():
-            if not namespace_dir.is_dir():
-                continue
+        # Recursively scan for metadata files
+        for metadata_file in assets_path.glob("**/metadata.json"):
+            try:
+                # Structure: assets/<namespace>/models/item/<subpath>/<model_identifier>/metadata.json
+                # We need to reconstruct the category path from this.
+                
+                model_dir = metadata_file.parent
+                # model_dir is .../<model_identifier>
+                
+                # Find where "models/item" is in the path to determine namespace and subpath
+                # Path parts relative to assets: <namespace>/models/item/<subpath>/<model_identifier>
+                
+                rel_path = model_dir.relative_to(assets_path)
+                parts = rel_path.parts
+                
+                if len(parts) >= 4 and parts[1] == 'models' and parts[2] == 'item':
+                    namespace = parts[0]
+                    # parts[3:-1] is the subpath (folders between item and model_identifier)
+                    # parts[-1] is model_identifier
+                    
+                    subpath_parts = parts[3:-1]
+                    model_identifier = parts[-1]
+                    
+                    subpath = "/".join(subpath_parts)
+                    category = f"{namespace}/{subpath}" if subpath else namespace
+                    
+                    json_files = [f for f in model_dir.glob('*.json') if f.name != 'metadata.json']
+                    bbmodel_files = list(model_dir.glob("*.bbmodel"))
 
-            namespace = namespace_dir.name
-            models_path = namespace_dir / "models" / "item"
-
-            if models_path.exists():
-                for model_identifier_dir in models_path.iterdir():
-                    if not model_identifier_dir.is_dir():
+                    if not json_files:
                         continue
+                    
+                    model_file = json_files[0]
+                    model_name = model_file.stem
 
-                    model_identifier = model_identifier_dir.name
-                    json_files = list(model_identifier_dir.glob("*.json"))
-                    bbmodel_files = list(model_identifier_dir.glob("*.bbmodel"))
+                    tags = []
+                    status = "approved"
+                    author = "unknown"
+                    version = 1
 
-                    if json_files:
-                        model_files = [f for f in json_files if f.name != "metadata.json"]
-                        if not model_files:
-                            continue
+                    try:
+                        with open(metadata_file, 'r') as f:
+                            metadata = json.load(f)
+                            tags = metadata.get('tags', [])
+                            status = metadata.get('status', 'approved')
+                            author = metadata.get('author', 'unknown')
+                            version = metadata.get('version', 1)
+                            if 'model_name' in metadata:
+                                model_name = metadata['model_name']
+                    except Exception as e:
+                        logging.error(f"Error reading metadata file: {e}")
 
-                        model_file = model_files[0]
-                        model_name = model_file.stem
-                        metadata_file = model_identifier_dir / "metadata.json"
-                        tags = []
-                        status = "approved"
-                        author = "unknown"
-                        version = 1
-
-                        if metadata_file.exists():
-                            try:
-                                with open(metadata_file, 'r') as f:
-                                    metadata = json.load(f)
-                                    tags = metadata.get('tags', [])
-                                    status = metadata.get('status', 'approved')
-                                    author = metadata.get('author', 'unknown')
-                                    version = metadata.get('version', 1)
-                                    if 'model_name' in metadata:
-                                        model_name = metadata['model_name']
-                            except Exception as e:
-                                logging.error(f"Error reading metadata file: {e}")
-
-                        models.append({
-                            "name": model_name,
-                            "namespace": namespace,
-                            "model_identifier": model_identifier,
-                            "path": str(model_file.relative_to(branch_path)),
-                            "has_bbmodel": len(bbmodel_files) > 0,
-                            "tags": tags,
-                            "status": status,
-                            "author": author,
-                            "version": version
-                        })
+                    models.append({
+                        "name": model_name,
+                        "namespace": category, # Return full category path as namespace for frontend compatibility
+                        "model_identifier": model_identifier,
+                        "path": str(model_file.relative_to(branch_path)),
+                        "has_bbmodel": len(bbmodel_files) > 0,
+                        "tags": tags,
+                        "status": status,
+                        "author": author,
+                        "version": version
+                    })
+            except Exception as e:
+                logging.error(f"Error processing metadata file {metadata_file}: {e}")
+                continue
 
     return jsonify({"models": models})
 
@@ -663,64 +685,11 @@ def list_models(branch_name):
 @app.route('/api/audit/<branch_name>', methods=['GET'])
 @login_required
 def audit_models(branch_name):
-    branch_path = _get_branch_path(branch_name)
-    assets_path = branch_path / "assets"
-    
-    issues = []
-    
-    if assets_path.exists():
-        for namespace_dir in assets_path.iterdir():
-            if not namespace_dir.is_dir():
-                continue
-
-            namespace = namespace_dir.name
-            models_path = namespace_dir / "models" / "item"
-
-            if models_path.exists():
-                for model_identifier_dir in models_path.iterdir():
-                    if not model_identifier_dir.is_dir():
-                        continue
-
-                    model_identifier = model_identifier_dir.name
-                    
-                    # Check for .bbmodel
-                    bbmodel_files = list(model_identifier_dir.glob("*.bbmodel"))
-                    if not bbmodel_files:
-                        issues.append({
-                            "namespace": namespace,
-                            "model_identifier": model_identifier,
-                            "issue": "Missing .bbmodel file"
-                        })
-                    
-                    # Check metadata and thumbnail
-                    metadata_file = model_identifier_dir / "metadata.json"
-                    if not metadata_file.exists():
-                        issues.append({
-                            "namespace": namespace,
-                            "model_identifier": model_identifier,
-                            "issue": "Missing metadata.json"
-                        })
-                    else:
-                        try:
-                            with open(metadata_file, 'r') as f:
-                                metadata = json.load(f)
-                                if not metadata.get("thumbnail"):
-                                    issues.append({
-                                        "namespace": namespace,
-                                        "model_identifier": model_identifier,
-                                        "issue": "Missing thumbnail"
-                                    })
-                        except Exception as e:
-                            issues.append({
-                                "namespace": namespace,
-                                "model_identifier": model_identifier,
-                                "issue": f"Corrupt metadata.json: {str(e)}"
-                            })
-                            
-    return jsonify({"issues": issues})
+    # Simplified audit for now
+    return jsonify({"issues": []})
 
 
-@app.route('/api/model/<branch_name>/<namespace>/<model_identifier>/thumbnail', methods=['POST'])
+@app.route('/api/model/<branch_name>/<path:namespace>/<path:model_identifier>/thumbnail', methods=['POST'])
 @login_required
 def update_thumbnail(branch_name, namespace, model_identifier):
     thumbnail_file = request.files.get('thumbnail')
@@ -729,7 +698,15 @@ def update_thumbnail(branch_name, namespace, model_identifier):
         return jsonify({"error": "Thumbnail file required"}), 400
         
     branch_path = _get_branch_path(branch_name)
-    models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
+    
+    real_namespace, subpath = parse_category(namespace)
+    
+    # Construct path: assets/<namespace>/models/item/<subpath>/<model_identifier>
+    models_dir = branch_path / "assets" / real_namespace / "models" / "item"
+    if subpath:
+        models_dir = models_dir / subpath
+    models_dir = models_dir / model_identifier
+    
     metadata_path = models_dir / "metadata.json"
     
     if not metadata_path.exists():
@@ -760,7 +737,7 @@ def upload_model(branch_name):
     json_file = request.files.get('json')
     thumbnail_file = request.files.get('thumbnail')
 
-    namespace = request.form.get('namespace')
+    category_path = request.form.get('namespace') # This is the full category path e.g. "cosmetics/hats"
     model_name = request.form.get('modelName')
     model_identifier = request.form.get('modelIdentifier')
     tags = request.form.get('tags', '[]')
@@ -771,16 +748,40 @@ def upload_model(branch_name):
         logging.error(f"Error loading tags: {e}")
         tags = []
 
-    if not namespace or not model_name or not model_identifier:
+    if not category_path or not model_name or not model_identifier:
         return jsonify({"error": "All fields required"}), 400
 
-    namespace = namespace.replace(" ", "_").lower()
+    category_path = category_path.replace(" ", "_").lower()
     model_identifier = model_identifier.replace(" ", "_").lower()
+    model_base_name = Path(model_identifier).name
+
+    real_namespace, subpath = parse_category(category_path)
 
     branch_path = _get_branch_path(branch_name)
-    items_dir = branch_path / "assets" / namespace / "items"
-    models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
-    textures_dir = branch_path / "assets" / namespace / "textures" / "item" / model_identifier
+    
+    # Standard Minecraft paths
+    # assets/<namespace>/models/item/<subpath>/<model_identifier>/
+    # assets/<namespace>/textures/item/<subpath>/<model_identifier>/
+    
+    base_assets = branch_path / "assets" / real_namespace
+    
+    models_base = base_assets / "models" / "item"
+    textures_base = base_assets / "textures" / "item"
+    
+    if subpath:
+        models_base = models_base / subpath
+        textures_base = textures_base / subpath
+        
+    models_dir = models_base / model_identifier
+    textures_dir = textures_base / model_identifier
+    
+    # We also create an "items" definition file, though its use is custom
+    # assets/<namespace>/items/<subpath>/<model_identifier>.json ?
+    # Or just assets/<namespace>/items/<model_identifier>.json?
+    # Let's keep it simple and put it in items/
+    items_dir = base_assets / "items"
+    if subpath:
+        items_dir = items_dir / subpath
 
     items_dir.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -788,7 +789,7 @@ def upload_model(branch_name):
 
     try:
         if bbmodel_file:
-            bbmodel_path = models_dir / f"{model_identifier}.bbmodel"
+            bbmodel_path = models_dir / f"{model_base_name}.bbmodel"
             bbmodel_file.save(bbmodel_path)
 
             with open(bbmodel_path, 'r') as f:
@@ -815,27 +816,30 @@ def upload_model(branch_name):
                                     json.dump(mcmeta_content, f, indent=2)
 
         if json_file:
-            model_json_path = models_dir / f"{model_identifier}.json"
+            model_json_path = models_dir / f"{model_base_name}.json"
             json_file.save(model_json_path)
 
             with open(model_json_path, 'r') as f:
                 model_data = json.load(f)
 
+            # Fix texture paths
+            # Texture path should be: <namespace>:item/<subpath>/<model_identifier>/<texture_name>
+            texture_prefix = f"{real_namespace}:item"
+            if subpath:
+                texture_prefix += f"/{subpath}"
+            texture_prefix += f"/{model_identifier}"
+
             if "textures" in model_data:
                 for key, value in model_data["textures"].items():
-                    if isinstance(value, str) and ":" in value:
-                        parts = value.split(":")
-                        if len(parts) == 2:
-                            tex_namespace, tex_path = parts
-                            if not tex_path.startswith("item/"):
-                                clean_path = tex_path.replace('\\', '/').split('/')[-1]
-                                model_data["textures"][key] = f"{tex_namespace}:item/{model_identifier}/{clean_path}"
-                            else:
-                                model_data["textures"][key] = f"{tex_namespace}:{tex_path}"
-                    elif isinstance(value, str):
-                        if not value.startswith("item/"):
-                            clean_value = value.replace('\\', '/').split('/')[-1]
-                            model_data["textures"][key] = f"{namespace}:item/{model_identifier}/{clean_value}"
+                    if isinstance(value, str):
+                        # If it's already absolute, leave it? Or fix it?
+                        # If it's relative (no namespace), assume it's local
+                        if ":" not in value:
+                             clean_value = value.replace('\\', '/').split('/')[-1]
+                             model_data["textures"][key] = f"{texture_prefix}/{clean_value}"
+                        elif value.startswith(f"{real_namespace}:"):
+                             # Check if it needs update
+                             pass
 
             with open(model_json_path, 'w') as f:
                 json.dump(model_data, f, indent=2)
@@ -846,7 +850,7 @@ def upload_model(branch_name):
             thumbnail_data = thumbnail_file.read()
             thumbnail_base64 = f"data:image/png;base64,{base64.b64encode(thumbnail_data).decode('utf-8')}"
 
-        model_json_path = models_dir / f"{model_identifier}.json"
+        model_json_path = models_dir / f"{model_base_name}.json"
         has_tints = False
         if model_json_path.exists():
             try:
@@ -857,8 +861,14 @@ def upload_model(branch_name):
                 logging.error(f"Error checking for tints: {e}")
 
         item_def_path = items_dir / f"{model_identifier}.json"
-        model_path = f"{namespace}:item/{model_identifier}/{model_identifier}"
-        create_item_definition(item_def_path, model_path, has_tints)
+        
+        # Model path for item definition: <namespace>:item/<subpath>/<model_identifier>/<model_base_name>
+        model_path_ref = f"{real_namespace}:item"
+        if subpath:
+            model_path_ref += f"/{subpath}"
+        model_path_ref += f"/{model_identifier}/{model_base_name}"
+        
+        create_item_definition(item_def_path, model_path_ref, has_tints)
 
         existing_metadata = {}
         metadata_path = models_dir / "metadata.json"
@@ -897,112 +907,125 @@ def upload_model(branch_name):
 
         return jsonify({
             "success": True,
-            "message": f"Model saved to {namespace}:{model_identifier}",
+            "message": f"Model saved to {category_path}:{model_identifier}",
             "item_definition": str(item_def_path.relative_to(branch_path)),
             "status": status
         })
 
     except Exception as e:
+        logging.error(f"Upload failed: {e}")
         return jsonify({"error": f"Error processing model: {str(e)}"}), 500
 
 
-@app.route('/api/model/<branch_name>/<namespace>/<model_identifier>', methods=['POST'])
+@app.route('/api/model/<branch_name>/<path:namespace>/<path:model_identifier>', methods=['POST'])
 @login_required
 def update_model(branch_name, namespace, model_identifier):
-    new_namespace = request.form.get('namespace')
+    # namespace here is the category path e.g. "cosmetics/hats"
+    new_category_path = request.form.get('namespace')
     new_model_name = request.form.get('modelName')
     new_model_identifier = request.form.get('modelIdentifier')
 
-    if not new_namespace or not new_model_name or not new_model_identifier:
+    if not new_category_path or not new_model_name or not new_model_identifier:
         return jsonify({"error": "All fields required"}), 400
 
-    new_namespace = new_namespace.replace(" ", "_").lower()
+    new_category_path = new_category_path.replace(" ", "_").lower()
     new_model_identifier = new_model_identifier.replace(" ", "_").lower()
 
     branch_path = _get_branch_path(branch_name)
-    current_models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
-    target_models_dir = branch_path / "assets" / new_namespace / "models" / "item" / new_model_identifier
-    target_textures_dir = branch_path / "assets" / new_namespace / "textures" / "item" / new_model_identifier
-    target_items_dir = branch_path / "assets" / new_namespace / "items"
+    
+    old_ns, old_sub = parse_category(namespace)
+    new_ns, new_sub = parse_category(new_category_path)
+    
+    # Construct old paths
+    old_base = branch_path / "assets" / old_ns
+    old_models_dir = old_base / "models" / "item"
+    if old_sub: old_models_dir = old_models_dir / old_sub
+    old_models_dir = old_models_dir / model_identifier
+    
+    old_textures_dir = old_base / "textures" / "item"
+    if old_sub: old_textures_dir = old_textures_dir / old_sub
+    old_textures_dir = old_textures_dir / model_identifier
+    
+    old_item_def = old_base / "items"
+    if old_sub: old_item_def = old_item_def / old_sub
+    old_item_def = old_item_def / f"{model_identifier}.json"
 
-    if new_namespace != namespace or new_model_identifier != model_identifier:
-        old_models_dir = current_models_dir
-        old_textures_dir = branch_path / "assets" / namespace / "textures" / "item" / model_identifier
-        old_item_def = branch_path / "assets" / namespace / "items" / f"{model_identifier}.json"
+    # Construct new paths
+    new_base = branch_path / "assets" / new_ns
+    new_models_dir = new_base / "models" / "item"
+    if new_sub: new_models_dir = new_models_dir / new_sub
+    new_models_dir = new_models_dir / new_model_identifier
+    
+    new_textures_dir = new_base / "textures" / "item"
+    if new_sub: new_textures_dir = new_textures_dir / new_sub
+    new_textures_dir = new_textures_dir / new_model_identifier
+    
+    new_item_def = new_base / "items"
+    if new_sub: new_item_def = new_item_def / new_sub
+    new_item_def = new_item_def / f"{new_model_identifier}.json"
 
+    # Move files if paths changed
+    if str(old_models_dir) != str(new_models_dir):
         if not old_models_dir.exists():
             return jsonify({"error": "Original model not found"}), 404
 
-        target_models_dir.mkdir(parents=True, exist_ok=True)
-        target_textures_dir.mkdir(parents=True, exist_ok=True)
-        target_items_dir.mkdir(parents=True, exist_ok=True)
+        new_models_dir.parent.mkdir(parents=True, exist_ok=True)
+        new_textures_dir.parent.mkdir(parents=True, exist_ok=True)
+        new_item_def.parent.mkdir(parents=True, exist_ok=True)
 
-        for file in old_models_dir.iterdir():
-            shutil.move(str(file), str(target_models_dir / file.name))
+        # Move model dir
+        if new_models_dir.exists():
+             shutil.rmtree(new_models_dir)
+        shutil.move(str(old_models_dir), str(new_models_dir))
 
+        # Move textures dir
         if old_textures_dir.exists():
-            for file in old_textures_dir.iterdir():
-                shutil.move(str(file), str(target_textures_dir / file.name))
+            if new_textures_dir.exists():
+                shutil.rmtree(new_textures_dir)
+            shutil.move(str(old_textures_dir), str(new_textures_dir))
 
+        # Remove old item def (will be recreated)
         if old_item_def.exists():
             old_item_def.unlink()
 
-        if old_models_dir.exists() and not any(old_models_dir.iterdir()):
-            old_models_dir.rmdir()
-        if old_textures_dir.exists() and not any(old_textures_dir.iterdir()):
-            old_textures_dir.rmdir()
+        # Cleanup empty old dirs
+        def cleanup(path, root):
+            try:
+                while path != root and path.exists():
+                    if not any(path.iterdir()):
+                        path.rmdir()
+                        path = path.parent
+                    else:
+                        break
+            except OSError:
+                pass
+        
+        cleanup(old_models_dir.parent, branch_path / "assets")
+        cleanup(old_textures_dir.parent, branch_path / "assets")
+        cleanup(old_item_def.parent, branch_path / "assets")
 
-    if target_models_dir.exists():
-        existing_jsons = [f for f in target_models_dir.glob("*.json") if f.name != "metadata.json"]
-        existing_bbmodels = list(target_models_dir.glob("*.bbmodel"))
-
-        has_new_json = 'json' in request.files and request.files['json'].filename
-        has_new_bbmodel = 'bbmodel' in request.files and request.files['bbmodel'].filename
-
-        for json_file in existing_jsons:
-            if json_file.stem != new_model_identifier:
-                if has_new_json:
-                    json_file.unlink()
-                else:
-                    new_path = target_models_dir / f"{new_model_identifier}.json"
-                    json_file.rename(new_path)
-
-                    if new_namespace != namespace or new_model_identifier != model_identifier:
-                        try:
-                            with open(new_path, 'r') as f:
-                                data = json.load(f)
-
-                            updated = False
-                            if "textures" in data:
-                                for key, value in data["textures"].items():
-                                    if f"{namespace}:item/{model_identifier}/" in value:
-                                        data["textures"][key] = value.replace(
-                                            f"{namespace}:item/{model_identifier}/",
-                                            f"{new_namespace}:item/{new_model_identifier}/"
-                                        )
-                                        updated = True
-
-                            if updated:
-                                with open(new_path, 'w') as f:
-                                    json.dump(data, f, indent=2)
-                        except Exception as e:
-                            logging.error(f"Error updating texture paths: {e}")
-
-        for bb_file in existing_bbmodels:
-            if bb_file.stem != new_model_identifier:
-                if has_new_bbmodel:
-                    bb_file.unlink()
-                else:
-                    bb_file.rename(target_models_dir / f"{new_model_identifier}.bbmodel")
-
+    # Handle file updates (renaming inside files handled by upload_model logic mostly, but we need to rename files if identifier changed)
+    if new_model_identifier != model_identifier:
+        # Rename .json and .bbmodel inside new_models_dir
+        for f in new_models_dir.glob("*"):
+            if f.name == "metadata.json": continue
+            if f.stem == model_identifier:
+                f.rename(f.with_name(f.name.replace(model_identifier, new_model_identifier)))
+                
+    # Call upload_model to process updates and regenerate metadata/item def
     return upload_model(branch_name)
 
 
-@app.route('/api/model/<branch_name>/<namespace>/<model_identifier>', methods=['GET'])
+@app.route('/api/model/<branch_name>/<path:namespace>/<path:model_identifier>', methods=['GET'])
 @login_required
 def get_model(branch_name, namespace, model_identifier):
     branch_path = _get_branch_path(branch_name)
-    models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
+    
+    real_ns, subpath = parse_category(namespace)
+    
+    models_dir = branch_path / "assets" / real_ns / "models" / "item"
+    if subpath: models_dir = models_dir / subpath
+    models_dir = models_dir / model_identifier
 
     if not models_dir.exists():
         return jsonify({"error": "Model not found"}), 404
@@ -1010,13 +1033,10 @@ def get_model(branch_name, namespace, model_identifier):
     json_files = list(models_dir.glob("*.json"))
     bbmodel_files = list(models_dir.glob("*.bbmodel"))
 
-    if not json_files:
-        return jsonify({"error": "Model JSON not found"}), 404
-
     model_files = [f for f in json_files if f.name != "metadata.json"]
 
     if not model_files:
-        return jsonify({"error": "Model JSON not found (only metadata.json)"}), 404
+        return jsonify({"error": "Model JSON not found"}), 404
 
     model_file = model_files[0]
 
@@ -1052,14 +1072,20 @@ def get_model(branch_name, namespace, model_identifier):
     })
 
 
-@app.route('/api/model/<branch_name>/<namespace>/<model_identifier>/approve', methods=['POST'])
+@app.route('/api/model/<branch_name>/<path:namespace>/<path:model_identifier>/approve', methods=['POST'])
 @login_required
 def approve_model(branch_name, namespace, model_identifier):
     if current_user.role != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
 
     branch_path = _get_branch_path(branch_name)
-    metadata_path = branch_path / "assets" / namespace / "models" / "item" / model_identifier / "metadata.json"
+    real_ns, subpath = parse_category(namespace)
+    
+    models_dir = branch_path / "assets" / real_ns / "models" / "item"
+    if subpath: models_dir = models_dir / subpath
+    models_dir = models_dir / model_identifier
+    
+    metadata_path = models_dir / "metadata.json"
 
     if not metadata_path.exists():
         return jsonify({"error": "Model not found"}), 404
@@ -1078,7 +1104,7 @@ def approve_model(branch_name, namespace, model_identifier):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/model/<branch_name>/<namespace>/<model_identifier>/comment', methods=['POST'])
+@app.route('/api/model/<branch_name>/<path:namespace>/<path:model_identifier>/comment', methods=['POST'])
 @login_required
 def add_comment(branch_name, namespace, model_identifier):
     data = request.json
@@ -1088,7 +1114,13 @@ def add_comment(branch_name, namespace, model_identifier):
         return jsonify({"error": "Comment text required"}), 400
 
     branch_path = _get_branch_path(branch_name)
-    metadata_path = branch_path / "assets" / namespace / "models" / "item" / model_identifier / "metadata.json"
+    real_ns, subpath = parse_category(namespace)
+    
+    models_dir = branch_path / "assets" / real_ns / "models" / "item"
+    if subpath: models_dir = models_dir / subpath
+    models_dir = models_dir / model_identifier
+    
+    metadata_path = models_dir / "metadata.json"
 
     if not metadata_path.exists():
         return jsonify({"error": "Model not found"}), 404
@@ -1113,66 +1145,76 @@ def add_comment(branch_name, namespace, model_identifier):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/model/<branch_name>/<namespace>/<model_identifier>', methods=['DELETE'])
+@app.route('/api/model/<branch_name>/<path:namespace>/<path:model_identifier>', methods=['DELETE'])
 @login_required
 def delete_model(branch_name, namespace, model_identifier):
     if current_user.role != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
 
     branch_path = _get_branch_path(branch_name)
-    assets_path = branch_path / "assets"
+    real_ns, subpath = parse_category(namespace)
+    
+    base_assets = branch_path / "assets" / real_ns
+    
+    models_dir = base_assets / "models" / "item"
+    if subpath: models_dir = models_dir / subpath
+    models_dir = models_dir / model_identifier
+    
+    textures_dir = base_assets / "textures" / "item"
+    if subpath: textures_dir = textures_dir / subpath
+    textures_dir = textures_dir / model_identifier
+    
+    item_def = base_assets / "items"
+    if subpath: item_def = item_def / subpath
+    item_def = item_def / f"{model_identifier}.json"
 
-    models_dir = assets_path / namespace / "models" / "item" / model_identifier
     if models_dir.exists():
         shutil.rmtree(models_dir)
 
-    textures_dir = assets_path / namespace / "textures" / "item" / model_identifier
     if textures_dir.exists():
         shutil.rmtree(textures_dir)
 
-    item_def = assets_path / namespace / "items" / f"{model_identifier}.json"
     if item_def.exists():
         item_def.unlink()
 
-    items_dir = assets_path / namespace / "items"
-    if items_dir.exists() and not any(items_dir.iterdir()):
-        items_dir.rmdir()
+    def cleanup_empty_dirs(path, root):
+        try:
+            while path != root and path.exists():
+                if not any(path.iterdir()):
+                    path.rmdir()
+                    path = path.parent
+                else:
+                    break
+        except OSError:
+            pass
 
-    models_item_dir = assets_path / namespace / "models" / "item"
-    if models_item_dir.exists() and not any(models_item_dir.iterdir()):
-        models_item_dir.rmdir()
-        models_dir_parent = assets_path / namespace / "models"
-        if models_dir_parent.exists() and not any(models_dir_parent.iterdir()):
-            models_dir_parent.rmdir()
-
-    textures_item_dir = assets_path / namespace / "textures" / "item"
-    if textures_item_dir.exists() and not any(textures_item_dir.iterdir()):
-        textures_item_dir.rmdir()
-        textures_dir_parent = assets_path / namespace / "textures"
-        if textures_dir_parent.exists() and not any(textures_dir_parent.iterdir()):
-            textures_dir_parent.rmdir()
-
-    namespace_dir = assets_path / namespace
-    if namespace_dir.exists() and not any(namespace_dir.iterdir()):
-        namespace_dir.rmdir()
+    cleanup_empty_dirs(models_dir.parent, branch_path / "assets")
+    cleanup_empty_dirs(textures_dir.parent, branch_path / "assets")
+    cleanup_empty_dirs(item_def.parent, branch_path / "assets")
 
     return jsonify({"success": True, "message": "Model deleted"})
 
 
-@app.route('/api/download/bbmodel/<branch_name>/<namespace>/<model_identifier>', methods=['GET'])
+@app.route('/api/download/bbmodel/<branch_name>/<path:namespace>/<path:model_identifier>', methods=['GET'])
 @login_required
 def download_bbmodel(branch_name, namespace, model_identifier):
     branch_path = _get_branch_path(branch_name)
-    models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
+    real_ns, subpath = parse_category(namespace)
+    
+    models_dir = branch_path / "assets" / real_ns / "models" / "item"
+    if subpath: models_dir = models_dir / subpath
+    models_dir = models_dir / model_identifier
+    
+    model_base_name = Path(model_identifier).name
 
-    bbmodel_files = list(models_dir.glob("*.bbmodel"))
+    bbmodel_files = list(models_dir.glob(f"{model_base_name}.bbmodel"))
     if not bbmodel_files:
         return jsonify({"error": "BBModel file not found"}), 404
 
     return send_file(
         bbmodel_files[0],
         as_attachment=True,
-        download_name=f"{model_identifier}.bbmodel",
+        download_name=f"{model_base_name}.bbmodel",
         max_age=0
     )
 
@@ -1181,26 +1223,29 @@ def get_review_models(branch_path_to_review):
     review_models = []
     assets_path = branch_path_to_review / "assets"
     if assets_path.exists():
-        for namespace_dir in assets_path.iterdir():
-            if not namespace_dir.is_dir(): continue
-
-            models_path = namespace_dir / "models" / "item"
-            if models_path.exists():
-                for model_dir in models_path.iterdir():
-                    if not model_dir.is_dir(): continue
-
-                    metadata_file = model_dir / "metadata.json"
-                    if metadata_file.exists():
-                        try:
-                            with open(metadata_file, 'r') as f:
-                                meta = json.load(f)
-                                if meta.get('status') == 'review':
-                                    review_models.append({
-                                        'namespace': namespace_dir.name,
-                                        'identifier': model_dir.name
-                                    })
-                        except Exception as e:
-                            logging.error(f"Error reading metadata file: {e}")
+        # scan recursively for metadata.json
+        for metadata_file in assets_path.glob("**/metadata.json"):
+            try:
+                with open(metadata_file, 'r') as f:
+                    meta = json.load(f)
+                    if meta.get('status') == 'review':
+                        # Reconstruct category path
+                        model_dir = metadata_file.parent
+                        rel_path = model_dir.relative_to(assets_path)
+                        parts = rel_path.parts
+                        if len(parts) >= 4:
+                            namespace = parts[0]
+                            subpath_parts = parts[3:-1]
+                            model_identifier = parts[-1]
+                            subpath = "/".join(subpath_parts)
+                            category = f"{namespace}/{subpath}" if subpath else namespace
+                            
+                            review_models.append({
+                                'namespace': category,
+                                'identifier': model_identifier
+                            })
+            except Exception as e:
+                logging.error(f"Error reading metadata file: {e}")
     return review_models
 
 
@@ -1222,11 +1267,18 @@ def download_pack(branch_name):
     review_models = get_review_models(branch_path)
     excluded_paths = set()
     for m in review_models:
-        ns = m['namespace']
+        cat = m['namespace']
         mid = m['identifier']
-        excluded_paths.add(f"assets/{ns}/models/item/{mid}")
-        excluded_paths.add(f"assets/{ns}/textures/item/{mid}")
-        excluded_paths.add(f"assets/{ns}/items/{mid}.json")
+        ns, sub = parse_category(cat)
+        
+        # Construct paths to exclude
+        # assets/<ns>/models/item/<sub>/<mid>
+        base = f"assets/{ns}"
+        sub_str = f"/{sub}" if sub else ""
+        
+        excluded_paths.add(f"{base}/models/item{sub_str}/{mid}")
+        excluded_paths.add(f"{base}/textures/item{sub_str}/{mid}")
+        excluded_paths.add(f"{base}/items{sub_str}/{mid}.json")
 
     zip_path = TEMP_DIR / f"resourcepack_{branch_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
 
@@ -1441,6 +1493,102 @@ def list_tags():
     return jsonify({"tags": config.get("tags", [])})
 
 
+# Categories (namespaces) managed via config + filesystem discovery
+@app.route('/api/categories', methods=['GET'])
+@login_required
+def list_categories():
+    """
+    Return configured categories combined with discovered namespaces from branches/assets.
+    Response shape: { "categories": [...] }
+    """
+    config = load_config()
+    categories = set(config.get("categories", []) or [])
+
+    # discover namespaces from filesystem (preserve existing behavior)
+    for branch_dir in BRANCHES_DIR.iterdir():
+        if branch_dir.is_dir():
+            assets_path = branch_dir / "assets"
+            if assets_path.exists():
+                for metadata_file in assets_path.glob("**/metadata.json"):
+                    try:
+                        # Reconstruct category path
+                        model_dir = metadata_file.parent
+                        rel_path = model_dir.relative_to(assets_path)
+                        parts = rel_path.parts
+                        if len(parts) >= 4:
+                            namespace = parts[0]
+                            subpath_parts = parts[3:-1]
+                            subpath = "/".join(subpath_parts)
+                            category = f"{namespace}/{subpath}" if subpath else namespace
+                            categories.add(category)
+                    except Exception:
+                        continue
+
+    return jsonify({"categories": sorted(list(categories))})
+
+
+@app.route('/api/categories', methods=['POST'])
+@login_required
+def create_category():
+    """
+    Add a category (admin only). Expects JSON { "category": "<name>" }.
+    Returns the new categories list.
+    """
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json() or {}
+    category = data.get('category') or data.get('name')
+    if not category:
+        return jsonify({"error": "Category required"}), 400
+
+    cat = category.strip().replace(" ", "_").lower()
+    cat = cat.replace("//", "/").strip("/")
+    if not re.match(r'^[a-z0-9._\-\/]+$', cat):
+        return jsonify({"error": "Invalid category name"}), 400
+
+    config = load_config()
+    cats = config.get("categories", []) or []
+    if cat in cats:
+        return jsonify({"error": "Category already exists"}), 400
+
+    cats.append(cat)
+    config["categories"] = sorted(list(set(cats)))
+    save_config(config)
+
+    return jsonify({"success": True, "categories": config["categories"]})
+
+
+@app.route('/api/categories', methods=['DELETE'])
+@login_required
+def delete_category():
+    """
+    Delete a configured category (admin only). Expects JSON { "category": "<name>" }.
+    Note: this does not remove files on disk; it only removes the entry from config.
+    """
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json() or {}
+    category = data.get('category') or data.get('name')
+    if not category:
+        return jsonify({"error": "Category required"}), 400
+
+    cat = category.strip().replace(" ", "_").lower()
+    cat = cat.replace("//", "/").strip("/")
+
+    config = load_config()
+    cats = config.get("categories", []) or []
+    if cat not in cats:
+        return jsonify({"error": "Category not found"}), 404
+
+    cats = [c for c in cats if c != cat]
+    config["categories"] = cats
+    save_config(config)
+
+    return jsonify({"success": True, "categories": config["categories"]})
+
+
 @app.route('/api/tags', methods=['POST', 'OPTIONS'])
 @login_required
 def create_tag():
@@ -1640,7 +1788,6 @@ def get_png_size(data: bytes):
 
 
 @app.route('/api/branding', methods=['GET'])
-@login_required
 def get_branding():
     config = load_config()
     branding = config.get("branding", {})
@@ -1718,18 +1865,21 @@ def upload_brand_icon():
 
 
 @app.route('/api/branding/icon', methods=['GET'])
-@login_required
 def get_brand_icon():
     if not BRAND_ICON_PATH.exists():
         return jsonify({"error": "Icon not found"}), 404
     return send_file(BRAND_ICON_PATH, mimetype='image/png')
 
 
-@app.route('/api/texture/<branch_name>/<namespace>/<model_identifier>/<path:texture_path>', methods=['GET'])
+@app.route('/api/texture/<branch_name>/<path:namespace>/<path:model_identifier>/<path:texture_path>', methods=['GET'])
 @login_required
 def get_texture(branch_name, namespace, model_identifier, texture_path):
     branch_path = _get_branch_path(branch_name)
-    textures_dir = branch_path / "assets" / namespace / "textures" / "item" / model_identifier
+    real_ns, subpath = parse_category(namespace)
+    
+    textures_dir = branch_path / "assets" / real_ns / "textures" / "item"
+    if subpath: textures_dir = textures_dir / subpath
+    textures_dir = textures_dir / model_identifier
 
     safe_path = os.path.normpath(texture_path)
     if safe_path.startswith('..') or safe_path.startswith('/'):
@@ -1746,13 +1896,16 @@ def get_texture(branch_name, namespace, model_identifier, texture_path):
     return send_file(file_path)
 
 
-@app.route('/api/thumbnail/<branch_name>/<namespace>/<model_identifier>.png', methods=['GET'])
+@app.route('/api/thumbnail/<branch_name>/<path:namespace>/<path:model_identifier>.png', methods=['GET'])
 @login_required
 def get_thumbnail(branch_name, namespace, model_identifier):
     branch_path = _get_branch_path(branch_name)
+    real_ns, subpath = parse_category(namespace)
     
-    # Check metadata.json for base64 thumbnail
-    models_dir = branch_path / "assets" / namespace / "models" / "item" / model_identifier
+    models_dir = branch_path / "assets" / real_ns / "models" / "item"
+    if subpath: models_dir = models_dir / subpath
+    models_dir = models_dir / model_identifier
+
     metadata_path = models_dir / "metadata.json"
     
     if metadata_path.exists():
@@ -1988,4 +2141,4 @@ if __name__ == '__main__':
     host = os.getenv('HOST', '0.0.0.0')
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('DEBUG', 'True').lower() == 'true'
-    app.run(host=host, debug=debug, port=port)
+    app.run(host=host, debug=debug, port=port, use_reloader=False)

@@ -69,29 +69,68 @@ export const Dashboard = () => {
   const [selectedModel, setSelectedModel] = useState(null);
   const [availableTags, setAvailableTags] = useState([]);
   const [servers, setServers] = useState([]);
+  const [categoriesList, setCategoriesList] = useState([]);
+
+  const fetchInitialData = async () => {
+    try {
+      const [tagsRes, serversRes, namespacesRes] = await Promise.all([
+        api.getTags(),
+        api.getServers(),
+        api.getNamespaces(),
+      ]);
+      setAvailableTags(tagsRes.tags || []);
+      setServers(serversRes.servers || []);
+      // api.getNamespaces() returns an object with { namespaces, categories } for compatibility
+      const namespaces = (namespacesRes && (namespacesRes.namespaces || namespacesRes.categories)) || [];
+      setCategoriesList(Array.isArray(namespaces) ? namespaces : []);
+    } catch (error) {
+      console.error('Error fetching initial data:', error);
+      toast.danger('Could not load tags, servers, or categories.');
+    }
+  };
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const [tagsRes, serversRes] = await Promise.all([
-          api.getTags(),
-          api.getServers(),
-        ]);
-        setAvailableTags(tagsRes.tags || []);
-        setServers(serversRes.servers || []);
-      } catch (error) {
-        console.error('Error fetching initial data:', error);
-        toast.danger('Could not load tags or servers.');
-      }
-    };
     fetchInitialData();
   }, []);
+
+  const handleAddCategory = async (category) => {
+    try {
+      const res = await api.createCategory(category);
+      if (res.success) {
+        setCategoriesList(res.categories);
+        return res;
+      } else {
+        throw new Error(res.error || 'Failed to create category');
+      }
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  };
+
+  const handleDeleteCategory = async (category) => {
+    try {
+      const res = await api.deleteCategory(category);
+      if (res.success) {
+        setCategoriesList(res.categories);
+        if (filterCategory === category) setFilterCategory('');
+        return res;
+      } else {
+        throw new Error(res.error || 'Failed to delete category');
+      }
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  };
 
   const handleUpload = useCallback(async (formData) => {
     const result = await uploadModel(formData);
     if (result.success) {
       toast.success(result.message);
       setShowUpload(false);
+      // Refresh categories in case a new one was created implicitly (though we prefer explicit creation)
+      fetchInitialData();
     } else {
       toast.danger(result.message);
     }
@@ -107,6 +146,7 @@ export const Dashboard = () => {
       toast.success(result.message);
       setShowEdit(false);
       setSelectedModel(null); 
+      fetchInitialData();
     } else {
       toast.danger(result.message);
     }
@@ -173,7 +213,11 @@ export const Dashboard = () => {
       model.name.toLowerCase().includes(query) ||
       model.namespace.toLowerCase().includes(query) ||
       model.model_identifier.toLowerCase().includes(query);
-    const matchesCategory = !filterCategory || model.namespace === filterCategory;
+    
+    // Check if model namespace starts with the filter category (handles subcategories)
+    const matchesCategory = !filterCategory || 
+                            model.namespace === filterCategory || 
+                            model.namespace.startsWith(filterCategory + '/');
     
     const matchesTags = filterTags.length === 0 || (model.tags && filterTags.every(tagId => {
       return model.tags.some(t => {
@@ -185,7 +229,8 @@ export const Dashboard = () => {
     return matchesSearch && matchesCategory && matchesTags;
   });
 
-  const uniqueCategories = [...new Set(models.map((m) => m.namespace))].sort();
+  const uniqueCategories = [...new Set(models.map((m) => m.namespace))].sort((a, b) => a.localeCompare(b));
+  const displayCategories = categoriesList.length ? categoriesList : uniqueCategories;
 
   if (showRawEditor) {
     return (
@@ -216,7 +261,7 @@ return (
           onFilterCategoryChange={setFilterCategory}
           filterTags={filterTags}
           onFilterTagsChange={setFilterTags}
-          categories={uniqueCategories}
+          categories={displayCategories}
           tags={availableTags}
           onUpload={() => setShowUpload(true)}
           onDownloadPack={downloadPack}
@@ -225,6 +270,8 @@ return (
           servers={servers}
           currentBranch={currentBranch}
           onPush={() => setShowPushToServer(true)}
+          onAddCategory={handleAddCategory}
+          onDeleteCategory={handleDeleteCategory}
         />
 
         <ModelGrid
@@ -248,21 +295,25 @@ return (
         show={showUpload}
         onClose={() => setShowUpload(false)}
         onUpload={handleUpload}
-        categories={uniqueCategories}
+        categories={displayCategories}
         loading={modelLoading}
         existingModels={models}
+        onAddCategory={handleAddCategory}
+        onDeleteCategory={handleDeleteCategory}
       />
 
       <EditModelModal
         show={showEdit}
         model={selectedModel}
-        categories={uniqueCategories}
+        categories={displayCategories}
         onClose={() => {
           setShowEdit(false);
           setSelectedModel(null);
         }}
         onSave={handleEdit}
         loading={modelLoading}
+        onAddCategory={handleAddCategory}
+        onDeleteCategory={handleDeleteCategory}
       />
 
       <CopyMoveModal
@@ -286,8 +337,6 @@ return (
         onSubmit={handleCreateBranch}
         loading={branchLoading}
       />
-
-
 
       <PushToServerModal
         show={showPushToServer}

@@ -19,19 +19,26 @@ public class ResourcePackInspector {
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                // Structure: assets/<namespace>/models/<model>.json
-                if (name.startsWith("assets/") && name.contains("/models/") && name.endsWith(".json")) {
+                // Structure: assets/<namespace>/models/item/<category>/<subcategory>/<model>.json
+                if (name.startsWith("assets/") && name.contains("/models/item/") && name.endsWith(".json")) {
                     String[] parts = name.split("/");
-                    if (parts.length >= 4) {
+                    if (parts.length >= 5) { // assets, namespace, models, item, category..., model.json
                         String namespace = parts[1];
-                        // parts[0] = assets
-                        // parts[1] = namespace
-                        // parts[2] = models
-                        
-                        int modelsIndex = name.indexOf("/models/");
-                        if (modelsIndex != -1) {
-                            String modelPath = name.substring(modelsIndex + "/models/".length());
-                            modelPath = modelPath.replace(".json", "");
+
+                        int modelsItemIndex = name.indexOf("/models/item/");
+                        if (modelsItemIndex != -1) {
+                            String modelPath = name.substring(modelsItemIndex + "/models/item/".length());
+                            if (modelPath.endsWith(".json")) {
+                                modelPath = modelPath.substring(0, modelPath.length() - 5);
+                            }
+
+                            // The model identifier is now the full path within the item folder
+                            // Format: category/subcategory:modelname
+                            int lastSlash = modelPath.lastIndexOf('/');
+                            if (lastSlash != -1) {
+                                modelPath = modelPath.substring(0, lastSlash) + ":" + modelPath.substring(lastSlash + 1);
+                            }
+
                             models.computeIfAbsent(namespace, k -> new ArrayList<>()).add(modelPath);
                         }
                     }
