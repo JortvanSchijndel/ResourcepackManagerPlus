@@ -666,15 +666,17 @@ const Settings = () => {
     );
   };
 
-  const tabs = [
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'branding', label: 'Branding', icon: ImageIcon },
-    { id: 'tags', label: 'Tag Management', icon: Tags },
-    { id: 'audit', label: 'Model Audit', icon: AlertTriangle },
-    ...(isAdmin ? [{ id: 'users', label: 'User Management', icon: User }] : []),
-    { id: 'servers', label: 'Server Management', icon: Server },
-    { id: 'github_backup', label: 'GitHub Backup', icon: Github },
+  const allTabs = [
+    { id: 'profile', label: 'Profile', icon: User, admin: false },
+    { id: 'branding', label: 'Branding', icon: ImageIcon, admin: true },
+    { id: 'tags', label: 'Tag Management', icon: Tags, admin: false },
+    { id: 'audit', label: 'Model Audit', icon: AlertTriangle, admin: true },
+    { id: 'users', label: 'User Management', icon: User, admin: true },
+    { id: 'servers', label: 'Server Management', icon: Server, admin: true },
+    { id: 'github_backup', label: 'GitHub Backup', icon: Github, admin: true },
   ];
+
+  const tabs = allTabs.filter(tab => !tab.admin || isAdmin);
 
   const renderContent = () => {
     if (loading) return <div className="flex justify-center items-center h-full"><p>Loading...</p></div>;
