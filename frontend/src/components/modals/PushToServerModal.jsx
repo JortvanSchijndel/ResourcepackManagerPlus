@@ -67,7 +67,7 @@ export const PushToServerModal = ({ servers, currentBranch, show, onClose }) => 
 
               <Modal.Body className="space-y-4 p-6">
                 <p className="text-secondary text-sm">
-                  Select the servers to push the '{currentBranch}' branch to.
+                  Select the servers to push the '{currentBranch}' branch to. WARNING: This will also push models that are currently in for review!
                 </p>
                 <div className="space-y-3">
                   {servers && servers.length > 0 ? (
