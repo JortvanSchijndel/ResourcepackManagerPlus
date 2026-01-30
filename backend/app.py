@@ -1017,13 +1017,17 @@ def update_model(branch_name, namespace, model_identifier):
         # Move model dir
         if new_models_dir.exists():
              shutil.rmtree(new_models_dir)
-        shutil.move(str(old_models_dir), str(new_models_dir))
+        temp_dir = TEMP_DIR / uuid.uuid4().hex
+        shutil.move(str(old_models_dir), temp_dir)
+        shutil.move(temp_dir, new_models_dir)
 
         # Move textures dir
         if old_textures_dir.exists():
             if new_textures_dir.exists():
                 shutil.rmtree(new_textures_dir)
-            shutil.move(str(old_textures_dir), str(new_textures_dir))
+            temp_tex_dir = TEMP_DIR / uuid.uuid4().hex
+            shutil.move(str(old_textures_dir), temp_tex_dir)
+            shutil.move(temp_tex_dir, new_textures_dir)
 
         # Remove old item def (will be recreated)
         if old_item_def.exists():
