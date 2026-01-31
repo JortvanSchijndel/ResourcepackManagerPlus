@@ -61,6 +61,9 @@ def backup_to_github():
             logging.error("Failed to pull from repository.")
             # Continue anyway, maybe a push will fix it
 
+    run_git_command(['config', 'user.name', 'RPM Backup Bot'], REPO_DIR)
+    run_git_command(['config', 'user.email', 'RPMbackup@users.noreply.github.com'], REPO_DIR)
+
     # 2. Copy files
     try:
         # Clear existing backup files

@@ -7,3 +7,4 @@ Werkzeug==3.0.3
 requests
 python-dotenv
 APScheduler==3.10.4
+pygit2
