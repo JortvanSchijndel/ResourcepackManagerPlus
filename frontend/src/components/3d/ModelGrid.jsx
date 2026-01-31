@@ -165,6 +165,12 @@ export const ModelGrid = ({
       const root = { models: [], children: {}, totalModels: 0 };
       
       modelsList.forEach(model => {
+          // Use the namespace as the path. If it contains slashes, split it.
+          // If it's flattened (e.g. "cosmetics-hats"), it will be treated as a single level unless we split by '-'?
+          // The requirement is to flatten the folder structure on disk, but maybe keep the UI hierarchy?
+          // The backend now returns the full category path in "namespace" field.
+          // If the backend returns "cosmetics/hats", we split by '/'.
+
           const parts = model.namespace.split('/');
           let currentNode = root;
           let currentPath = '';

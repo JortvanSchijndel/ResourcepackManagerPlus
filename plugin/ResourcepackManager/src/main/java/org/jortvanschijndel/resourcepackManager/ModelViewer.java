@@ -63,51 +63,22 @@ public class ModelViewer implements Listener {
         }
 
         List<String> allModels = plugin.getPackInspector().getModels(namespace);
-        final String currentPath = path.isEmpty() ? "" : path + "/";
+        // With flattened structure, models are just filenames. We don't have subfolders anymore in the path.
+        // So we just list all models for the namespace.
 
-        Set<String> subcategories = new HashSet<>();
-        List<String> models = new ArrayList<>();
-        Map<String, String> modelFullPathMap = new HashMap<>(); // Maps model name to its full path for NamespacedKey
+        // However, if we want to support legacy structure or just be safe, we can check for slashes.
+        // But the new structure guarantees flat paths relative to item folder.
 
-        for (String modelIdentifier : allModels) {
-            String modelPath = modelIdentifier.replace(":", "/");
-
-            if (modelPath.startsWith(currentPath)) {
-                String remainingPath = modelPath.substring(currentPath.length());
-                String[] parts = remainingPath.split("/");
-
-                if (parts.length > 1) {
-                    if (parts.length == 2 && parts[0].equals(parts[1])) {
-                        // Heuristic for "model/model" structure, treat as a model
-                        if (!models.contains(parts[0])) {
-                            models.add(parts[0]);
-                            modelFullPathMap.put(parts[0], currentPath + remainingPath);
-                        }
-                    } else {
-                        subcategories.add(parts[0]);
-                    }
-                } else if (!remainingPath.isEmpty()) {
-                    models.add(remainingPath);
-                    modelFullPathMap.put(remainingPath, currentPath + remainingPath);
-                }
-            }
-        }
-
-        List<String> sortedSubcategories = new ArrayList<>(subcategories);
-        Collections.sort(sortedSubcategories);
+        List<String> models = new ArrayList<>(allModels);
         Collections.sort(models);
 
-        List<Object> items = new ArrayList<>();
-        items.addAll(sortedSubcategories);
-        items.addAll(models);
-
         int pageSize = 45;
-        int totalPages = (int) Math.ceil((double) items.size() / pageSize);
+        int totalPages = (int) Math.ceil((double) models.size() / pageSize);
         if (page < 0) page = 0;
         if (page >= totalPages && totalPages > 0) page = totalPages - 1;
 
-        String title = path.isEmpty() ? namespace : path.substring(path.lastIndexOf('/') + 1);
-        ModelViewerHolder holder = new ModelViewerHolder("models", namespace, path, page);
+        String title = namespace;
+        ModelViewerHolder holder = new ModelViewerHolder("models", namespace, "", page);
         Inventory inv = Bukkit.createInventory(holder, 54, Component.text(title));
         holder.setInventory(inv);
 
@@ -119,8 +90,8 @@ public class ModelViewer implements Listener {
 
         // Items for current page
         int startIndex = page * pageSize;
-        int endIndex = Math.min(startIndex + pageSize, items.size());
-        List<Object> pageItems = (startIndex < items.size()) ? items.subList(startIndex, endIndex) : Collections.emptyList();
+        int endIndex = Math.min(startIndex + pageSize, models.size());
+        List<String> pageItems = (startIndex < models.size()) ? models.subList(startIndex, endIndex) : Collections.emptyList();
 
         FileConfiguration config = plugin.getConfig();
         String baseItemName = config.getString("model-viewer.base-item", "LEATHER_HORSE_ARMOR");
@@ -128,31 +99,18 @@ public class ModelViewer implements Listener {
         if (baseMaterial == null) baseMaterial = Material.LEATHER_HORSE_ARMOR;
         final Material finalBaseMaterial = baseMaterial;
 
-        animateItems(player, inv, pageItems, (item) -> {
-            if (item instanceof String itemName) {
-                if (subcategories.contains(itemName)) { // It's a subcategory
-                    ItemStack stack = new ItemStack(Material.CHEST);
-                    ItemMeta meta = stack.getItemMeta();
-                    meta.displayName(Component.text(itemName, NamedTextColor.GOLD));
-                    stack.setItemMeta(meta);
-                    return stack;
-                } else { // It's a model
-                    ItemStack stack = new ItemStack(finalBaseMaterial);
-                    ItemMeta meta = stack.getItemMeta();
-                    meta.displayName(Component.text(itemName, NamedTextColor.WHITE));
-                    try {
-                        String fullModelPath = modelFullPathMap.get(itemName);
-                        if (fullModelPath != null) {
-                            meta.setItemModel(new NamespacedKey(namespace, fullModelPath));
-                        }
-                    } catch (Exception e) {
-                        // Ignore invalid keys
-                    }
-                    stack.setItemMeta(meta);
-                    return stack;
-                }
+        animateItems(player, inv, pageItems, (modelName) -> {
+            ItemStack stack = new ItemStack(finalBaseMaterial);
+            ItemMeta meta = stack.getItemMeta();
+            meta.displayName(Component.text(modelName, NamedTextColor.WHITE));
+            try {
+                // Model path is just the name now
+                meta.setItemModel(new NamespacedKey(namespace, modelName));
+            } catch (Exception e) {
+                // Ignore invalid keys
             }
-            return null;
+            stack.setItemMeta(meta);
+            return stack;
         });
     }
 
@@ -232,12 +190,7 @@ public class ModelViewer implements Listener {
                 return;
             }
             if (event.getSlot() == 49) { // Back
-                if (holder.path == null || holder.path.isEmpty()) {
-                    open(player, null); // Back to namespaces
-                } else {
-                    String parentPath = holder.path.contains("/") ? holder.path.substring(0, holder.path.lastIndexOf('/')) : "";
-                    openCategory(player, holder.namespace, parentPath, 0);
-                }
+                open(player, null); // Back to namespaces
                 return;
             }
             if (event.getSlot() == 50) { // Search
@@ -251,16 +204,8 @@ public class ModelViewer implements Listener {
 
             // Clicked an item
             if (event.getSlot() < 45) {
-                if (clicked.getType() == Material.CHEST) { // It's a subcategory
-                    Component displayName = clicked.getItemMeta().displayName();
-                    if (displayName instanceof TextComponent tc) {
-                        String newPath = holder.path.isEmpty() ? tc.content() : holder.path + "/" + tc.content();
-                        openCategory(player, holder.namespace, newPath, 0);
-                    }
-                } else { // It's a model
-                    player.getInventory().addItem(clicked.clone());
-                    player.sendMessage(Component.text("Given model!", NamedTextColor.GREEN));
-                }
+                player.getInventory().addItem(clicked.clone());
+                player.sendMessage(Component.text("Given model!", NamedTextColor.GREEN));
             }
         } else if ("search_results".equals(type)) {
             if (event.getSlot() == 49) {
@@ -320,15 +265,14 @@ public class ModelViewer implements Listener {
         animateItems(player, inv, matchingModels, (entry) -> {
             String namespace = entry.getKey();
             String modelIdentifier = entry.getValue();
-            String modelPath = modelIdentifier.replace(":", "/");
+            // modelIdentifier is just the filename now
             
             ItemStack item = new ItemStack(finalBaseMaterial);
             ItemMeta meta = item.getItemMeta();
-            String shortName = modelPath.substring(modelPath.lastIndexOf('/') + 1);
-            meta.displayName(Component.text(shortName, NamedTextColor.WHITE));
+            meta.displayName(Component.text(modelIdentifier, NamedTextColor.WHITE));
             meta.lore(List.of(Component.text(namespace + ":" + modelIdentifier, NamedTextColor.GRAY)));
             try {
-                meta.setItemModel(new NamespacedKey(namespace, modelPath));
+                meta.setItemModel(new NamespacedKey(namespace, modelIdentifier));
             } catch (Exception e) {
                 // Ignore
             }

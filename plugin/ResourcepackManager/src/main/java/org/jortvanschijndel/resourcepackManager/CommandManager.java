@@ -127,8 +127,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // Convert back to path format for NamespacedKey
-        String modelPath = matchingModels.get(0).replace(":", "/");
+        String modelPath = matchingModels.get(0);
 
         Material material = Material.matchMaterial(itemName);
         if (material == null) {

@@ -19,10 +19,18 @@ public class ResourcePackInspector {
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                // Structure: assets/<namespace>/models/item/<category>/<subcategory>/<model>.json
+                // Structure: assets/<namespace>/models/item/<model>.json
+                // Or legacy: assets/<namespace>/models/item/<category>/<subcategory>/<model>.json
+
                 if (name.startsWith("assets/") && name.contains("/models/item/") && name.endsWith(".json")) {
                     String[] parts = name.split("/");
-                    if (parts.length >= 5) { // assets, namespace, models, item, category..., model.json
+                    // parts[0] = assets
+                    // parts[1] = namespace
+                    // parts[2] = models
+                    // parts[3] = item
+                    // parts[4+] = model path
+
+                    if (parts.length >= 5) {
                         String namespace = parts[1];
 
                         int modelsItemIndex = name.indexOf("/models/item/");
@@ -32,13 +40,16 @@ public class ResourcePackInspector {
                                 modelPath = modelPath.substring(0, modelPath.length() - 5);
                             }
 
-                            // The model identifier is now the full path within the item folder
-                            // Format: category/subcategory:modelname
-                            int lastSlash = modelPath.lastIndexOf('/');
-                            if (lastSlash != -1) {
-                                modelPath = modelPath.substring(0, lastSlash) + ":" + modelPath.substring(lastSlash + 1);
-                            }
+                            // The model identifier is the path within the item folder
+                            // If it's flattened (new structure), it's just "modelname"
+                            // If it's legacy, it's "category/subcategory/modelname"
 
+                            // We store it as is, because NamespacedKey expects "namespace:path/to/model"
+                            // But for tab completion we might want to show it nicely.
+                            // The previous implementation replaced last slash with colon, which is weird for NamespacedKey
+                            // NamespacedKey is (namespace, key). Key can contain slashes.
+
+                            // Let's just store the raw path relative to item folder.
                             models.computeIfAbsent(namespace, k -> new ArrayList<>()).add(modelPath);
                         }
                     }

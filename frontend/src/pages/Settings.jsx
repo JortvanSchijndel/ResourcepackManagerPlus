@@ -17,7 +17,9 @@ import {
   Tags,
   GitBranch,
   SunMoon,
-  Github
+  Github,
+  Wrench,
+  Paintbrush
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/constants';
@@ -96,6 +98,8 @@ const Settings = () => {
   const [auditLoading, setAuditLoading] = useState(false);
   const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
   const [regeneratingAllThumbnails, setRegeneratingAllThumbnails] = useState(false);
+  const [fixingPaths, setFixingPaths] = useState(false);
+  const [fixingTextures, setFixingTextures] = useState(false);
   const [currentThumbnailModel, setCurrentThumbnailModel] = useState(null);
   const captureThumbnailRef = useRef(null);
 
@@ -443,6 +447,74 @@ const Settings = () => {
       toast.danger("Failed to run audit");
     } finally {
       setAuditLoading(false);
+    }
+  };
+
+  const fixPaths = async () => {
+    if (!selectedAuditBranch) {
+      toast.danger("Select a branch first.");
+      return;
+    }
+    if (!confirm("This will flatten the folder structure for all models in this branch (e.g. 'cosmetics/hats' -> 'cosmetics-hats'). This action cannot be easily undone. Continue?")) {
+      return;
+    }
+    
+    setFixingPaths(true);
+    try {
+      const response = await fetchWithCreds(`${API_URL}/audit/fix-paths/${selectedAuditBranch}`, {
+        method: 'POST'
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        toast.success(`Fixed paths for ${data.moved} models.`);
+        if (data.errors && data.errors.length > 0) {
+          toast.warning(`Encountered ${data.errors.length} errors.`);
+          console.error("Fix path errors:", data.errors);
+        }
+        runAudit(); // Re-run audit to update list
+      } else {
+        toast.danger(data.error || "Failed to fix paths");
+      }
+    } catch (error) {
+      console.error("Fix paths failed:", error);
+      toast.danger("Failed to fix paths");
+    } finally {
+      setFixingPaths(false);
+    }
+  };
+
+  const fixTextures = async () => {
+    if (!selectedAuditBranch) {
+      toast.danger("Select a branch first.");
+      return;
+    }
+    if (!confirm("This will attempt to fix broken #missing texture references and incorrect 'minecraft:item' namespaces. This action cannot be easily undone. Continue?")) {
+      return;
+    }
+    
+    setFixingTextures(true);
+    try {
+      const response = await fetchWithCreds(`${API_URL}/audit/fix-textures/${selectedAuditBranch}`, {
+        method: 'POST'
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        toast.success(`Fixed textures for ${data.fixed_files} models.`);
+        if (data.errors && data.errors.length > 0) {
+          toast.warning(`Encountered ${data.errors.length} errors.`);
+          console.error("Fix texture errors:", data.errors);
+        }
+        runAudit(); // Re-run audit to update list
+      } else {
+        toast.danger(data.error || "Failed to fix textures");
+      }
+    } catch (error) {
+      console.error("Fix textures failed:", error);
+      toast.danger("Failed to fix textures");
+    } finally {
+      setFixingTextures(false);
     }
   };
 
@@ -851,7 +923,7 @@ const Settings = () => {
                     placeholder="Select branch"
                     selectedKey={selectedAuditBranch || ''}
                     onSelectionChange={setSelectedAuditBranch}
-                    isDisabled={branchesLoading || auditLoading || generatingThumbnails || regeneratingAllThumbnails}
+                    isDisabled={branchesLoading || auditLoading || generatingThumbnails || regeneratingAllThumbnails || fixingPaths || fixingTextures}
                   >
                     <Select.Trigger className="select__trigger flex items-center gap-2">
                       <Select.Value />
@@ -871,17 +943,29 @@ const Settings = () => {
                     </Select.Popover>
                   </Select>
                 </div>
-                <Button onPress={runAudit} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || !selectedAuditBranch}>
+                <Button onPress={runAudit} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || fixingPaths || fixingTextures || !selectedAuditBranch}>
                   {auditLoading ? 'Scanning...' : 'Scan for Issues'}
                 </Button>
-                <Button onPress={handleRegenerateAllThumbnails} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || !selectedAuditBranch}>
+                <Button onPress={handleRegenerateAllThumbnails} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || fixingPaths || fixingTextures || !selectedAuditBranch}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     {regeneratingAllThumbnails ? 'Regenerating...' : 'Regenerate All'}
                 </Button>
                 {auditIssues.some(i => i.issue === "Missing thumbnail") && (
-                  <Button onPress={generateThumbnails} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || !selectedAuditBranch}>
+                  <Button onPress={generateThumbnails} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || fixingPaths || fixingTextures || !selectedAuditBranch}>
                     <ImageIcon className="mr-2 h-4 w-4" />
                     {generatingThumbnails ? 'Generating...' : `Generate Missing (${auditIssues.filter(i => i.issue === "Missing thumbnail").length})`}
+                  </Button>
+                )}
+                {auditIssues.some(i => i.issue === "Legacy folder structure (subcategories)") && (
+                  <Button onPress={fixPaths} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || fixingPaths || fixingTextures || !selectedAuditBranch} color="warning">
+                    <Wrench className="mr-2 h-4 w-4" />
+                    {fixingPaths ? 'Fixing...' : 'Fix Folder Structure'}
+                  </Button>
+                )}
+                {auditIssues.some(i => i.issue.includes("texture")) && (
+                  <Button onPress={fixTextures} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || fixingPaths || fixingTextures || !selectedAuditBranch} color="primary">
+                    <Paintbrush className="mr-2 h-4 w-4" />
+                    {fixingTextures ? 'Fixing...' : 'Fix Texture Issues'}
                   </Button>
                 )}
               </div>
