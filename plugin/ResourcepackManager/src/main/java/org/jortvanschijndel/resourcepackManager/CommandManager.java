@@ -115,19 +115,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
 
         String itemName = args[0];
-        String namespace = args[1];
+        String displayNamespace = args[1];
         String modelIdentifier = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
 
-        List<String> matchingModels = plugin.getPackInspector().getModels(namespace).stream()
-                .filter(s -> s.equalsIgnoreCase(modelIdentifier))
-                .toList();
+        ResourcePackInspector.ModelInfo modelInfo = plugin.getPackInspector().getModelInfo(displayNamespace, modelIdentifier);
 
-        if (matchingModels.isEmpty()) {
+        if (modelInfo == null) {
             sender.sendMessage(miniMessage.deserialize("<red>Model not found: " + modelIdentifier + "</red>"));
             return;
         }
-
-        String modelPath = matchingModels.get(0);
 
         Material material = Material.matchMaterial(itemName);
         if (material == null) {
@@ -139,10 +135,13 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             try {
-                meta.setItemModel(new NamespacedKey(namespace, modelPath));
+                if (plugin.isDebugEnabled()) {
+                    plugin.getLogger().info("[Debug] Applying model to given item: " + modelInfo.realNamespace + ":" + modelInfo.realPath);
+                }
+                meta.setItemModel(new NamespacedKey(modelInfo.realNamespace, modelInfo.realPath));
                 item.setItemMeta(meta);
             } catch (IllegalArgumentException e) {
-                sender.sendMessage(miniMessage.deserialize("<red>Invalid namespace or key: " + namespace + ":" + modelPath + "</red>"));
+                sender.sendMessage(miniMessage.deserialize("<red>Invalid namespace or key: " + modelInfo.realNamespace + ":" + modelInfo.realPath + "</red>"));
                 return;
             }
         }
@@ -170,6 +169,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         } else if (args.length >= 3) {
             String namespace = args[1];
             String currentInput = String.join(" ", Arrays.copyOfRange(args, 2, args.length)).toLowerCase();
+
             return plugin.getPackInspector().getModels(namespace).stream()
                     .filter(s -> s.toLowerCase().startsWith(currentInput))
                     .collect(Collectors.toList());
@@ -246,5 +246,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         boolean currentDebugState = plugin.isDebugEnabled();
         plugin.setDebugEnabled(!currentDebugState);
         sender.sendMessage("Debug mode " + (plugin.isDebugEnabled() ? "enabled" : "disabled") + ".");
+        if (plugin.isDebugEnabled()) {
+            sender.sendMessage("Reloading plugin to apply debug changes and re-inspect pack...");
+            plugin.reloadPluginConfig();
+        }
     }
 }

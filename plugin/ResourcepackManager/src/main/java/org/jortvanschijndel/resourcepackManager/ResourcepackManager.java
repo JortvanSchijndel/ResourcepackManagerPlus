@@ -30,7 +30,7 @@ public final class ResourcepackManager extends JavaPlugin {
         httpServer.start();
 
         // Load active pack
-        packInspector = new ResourcePackInspector();
+        packInspector = new ResourcePackInspector(this);
         loadActivePack();
 
         // Register listener
@@ -74,6 +74,8 @@ public final class ResourcepackManager extends JavaPlugin {
             httpServer = new HttpServer(this);
             httpServer.start();
         }
+        // Also reinspect the pack on reload
+        loadActivePack();
     }
 
     public File getActivePack() {
@@ -110,7 +112,13 @@ public final class ResourcepackManager extends JavaPlugin {
                 activePack = files[0];
                 getLogger().info("Loaded active resource pack: " + activePack.getName());
                 packInspector.inspect(activePack);
+            } else {
+                getLogger().warning("No resource packs found in the 'packs' folder.");
+                activePack = null;
+                packInspector.inspect(null); // Clear old models
             }
+        } else {
+             getLogger().warning("Packs folder does not exist.");
         }
     }
 

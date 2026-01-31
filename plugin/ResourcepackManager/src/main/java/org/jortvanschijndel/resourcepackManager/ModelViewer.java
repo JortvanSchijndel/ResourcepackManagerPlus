@@ -59,39 +59,42 @@ public class ModelViewer implements Listener {
                 item.setItemMeta(meta);
                 return item;
             });
+            player.openInventory(inv); // Open inventory immediately for namespaces
             return;
         }
 
-        List<String> allModels = plugin.getPackInspector().getModels(namespace);
-        // With flattened structure, models are just filenames. We don't have subfolders anymore in the path.
-        // So we just list all models for the namespace.
-
-        // However, if we want to support legacy structure or just be safe, we can check for slashes.
-        // But the new structure guarantees flat paths relative to item folder.
-
-        List<String> models = new ArrayList<>(allModels);
-        Collections.sort(models);
+        List<String> items = plugin.getPackInspector().getModelsInPath(namespace, path);
+        Collections.sort(items);
 
         int pageSize = 45;
-        int totalPages = (int) Math.ceil((double) models.size() / pageSize);
+        int totalPages = (int) Math.ceil((double) items.size() / pageSize);
         if (page < 0) page = 0;
         if (page >= totalPages && totalPages > 0) page = totalPages - 1;
 
-        String title = namespace;
-        ModelViewerHolder holder = new ModelViewerHolder("models", namespace, "", page);
+        String title = namespace + (path.isEmpty() ? "" : ": " + path);
+        if (title.length() > 32) title = "..." + title.substring(title.length() - 29); // Inventory title limit
+
+        ModelViewerHolder holder = new ModelViewerHolder("models", namespace, path, page);
         Inventory inv = Bukkit.createInventory(holder, 54, Component.text(title));
         holder.setInventory(inv);
 
         // Navigation
         if (page > 0) inv.setItem(45, createNavItem(Material.ARROW, "Previous Page"));
-        inv.setItem(49, createNavItem(Material.BARRIER, "Back"));
+
+        // Back button logic
+        if (path.isEmpty()) {
+            inv.setItem(49, createNavItem(Material.BARRIER, "Back to Categories"));
+        } else {
+            inv.setItem(49, createNavItem(Material.BARRIER, "Back"));
+        }
+
         inv.setItem(50, getSearchItem());
         if (page < totalPages - 1) inv.setItem(53, createNavItem(Material.ARROW, "Next Page"));
 
         // Items for current page
         int startIndex = page * pageSize;
-        int endIndex = Math.min(startIndex + pageSize, models.size());
-        List<String> pageItems = (startIndex < models.size()) ? models.subList(startIndex, endIndex) : Collections.emptyList();
+        int endIndex = Math.min(startIndex + pageSize, items.size());
+        List<String> pageItems = (startIndex < items.size()) ? items.subList(startIndex, endIndex) : Collections.emptyList();
 
         FileConfiguration config = plugin.getConfig();
         String baseItemName = config.getString("model-viewer.base-item", "LEATHER_HORSE_ARMOR");
@@ -99,23 +102,48 @@ public class ModelViewer implements Listener {
         if (baseMaterial == null) baseMaterial = Material.LEATHER_HORSE_ARMOR;
         final Material finalBaseMaterial = baseMaterial;
 
-        animateItems(player, inv, pageItems, (modelName) -> {
-            ItemStack stack = new ItemStack(finalBaseMaterial);
-            ItemMeta meta = stack.getItemMeta();
-            meta.displayName(Component.text(modelName, NamedTextColor.WHITE));
-            try {
-                // Model path is just the name now
-                meta.setItemModel(new NamespacedKey(namespace, modelName));
-            } catch (Exception e) {
-                // Ignore invalid keys
+        animateItems(player, inv, pageItems, (itemName) -> {
+            if (itemName.endsWith("/")) {
+                // It's a folder
+                ItemStack stack = new ItemStack(Material.CHEST);
+                ItemMeta meta = stack.getItemMeta();
+                meta.displayName(Component.text(itemName.substring(0, itemName.length() - 1), NamedTextColor.GOLD));
+                meta.lore(List.of(Component.text("Click to open folder", NamedTextColor.GRAY)));
+                stack.setItemMeta(meta);
+                return stack;
+            } else {
+                // It's a model
+                ItemStack stack = new ItemStack(finalBaseMaterial);
+                ItemMeta meta = stack.getItemMeta();
+                meta.displayName(Component.text(itemName, NamedTextColor.WHITE));
+
+                // Construct full display path for the model
+                String fullModelPath = path + itemName;
+                ResourcePackInspector.ModelInfo modelInfo = plugin.getPackInspector().getModelInfo(namespace, fullModelPath);
+
+                if (modelInfo != null) {
+                    try {
+                        if (plugin.isDebugEnabled()) {
+                            plugin.getLogger().info("[Debug] Applying model to item: " + modelInfo.realNamespace + ":" + modelInfo.realPath);
+                        }
+                        meta.setItemModel(new NamespacedKey(modelInfo.realNamespace, modelInfo.realPath));
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Invalid model key for " + modelInfo.realNamespace + ":" + modelInfo.realPath);
+                    }
+                } else {
+                     plugin.getLogger().warning("Could not find model info for " + namespace + ":" + fullModelPath);
+                }
+                stack.setItemMeta(meta);
+                return stack;
             }
-            stack.setItemMeta(meta);
-            return stack;
         });
     }
 
     private <T> void animateItems(Player player, Inventory inv, List<T> items, ItemMapper<T> mapper) {
-        player.openInventory(inv);
+        // Only open inventory once for namespaces, for models, it's already open
+        if (!"namespaces".equals(((ModelViewerHolder) inv.getHolder()).type)) {
+            player.openInventory(inv);
+        }
         
         FileConfiguration config = plugin.getConfig();
         boolean animationEnabled = config.getBoolean("model-viewer.animation-enabled", true);
@@ -131,35 +159,38 @@ public class ModelViewer implements Listener {
         long totalTicks = (long) (duration * 20);
         if (totalTicks < 1) totalTicks = 1;
 
-        final long finalTotalTicks = totalTicks;
+        int totalItems = Math.min(items.size(), 45);
+        if (totalItems == 0) return;
+
+        long delay = Math.round((double) totalTicks / totalItems);
+        if (delay < 1) delay = 1;
+
+        final long finalDelay = delay;
 
         new BukkitRunnable() {
             int index = 0;
             
             @Override
             public void run() {
-                if (index >= items.size() || index >= 45) {
+                if (index >= totalItems) {
+                    this.cancel();
+                    return;
+                }
+
+                // Check if inventory is still open and valid
+                if (player.getOpenInventory().getTopInventory() != inv) {
                     this.cancel();
                     return;
                 }
                 
-                int totalItems = Math.min(items.size(), 45);
-                double itemsPerTick = (double) totalItems / (double) finalTotalTicks;
-                int itemsToPlace = (int) Math.ceil(itemsPerTick);
-                if (itemsToPlace < 1) itemsToPlace = 1;
-
-                for (int i = 0; i < itemsToPlace; i++) {
-                    if (index >= items.size() || index >= 45) break;
-                    
-                    T data = items.get(index);
-                    ItemStack item = mapper.map(data);
-                    if (item != null) {
-                        inv.setItem(index, item);
-                    }
-                    index++;
+                T data = items.get(index);
+                ItemStack item = mapper.map(data);
+                if (item != null) {
+                    inv.setItem(index, item);
                 }
+                index++;
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+        }.runTaskTimer(plugin, 0L, finalDelay);
     }
 
     @EventHandler
@@ -190,7 +221,21 @@ public class ModelViewer implements Listener {
                 return;
             }
             if (event.getSlot() == 49) { // Back
-                open(player, null); // Back to namespaces
+                if (holder.path.isEmpty()) {
+                    open(player, null); // Back to namespaces
+                } else {
+                    // Go up one level
+                    String currentPath = holder.path;
+                    // Remove trailing slash if exists
+                    if (currentPath.endsWith("/")) currentPath = currentPath.substring(0, currentPath.length() - 1);
+
+                    int lastSlash = currentPath.lastIndexOf('/');
+                    String parentPath = "";
+                    if (lastSlash != -1) {
+                        parentPath = currentPath.substring(0, lastSlash + 1);
+                    }
+                    openCategory(player, holder.namespace, parentPath, 0);
+                }
                 return;
             }
             if (event.getSlot() == 50) { // Search
@@ -204,8 +249,18 @@ public class ModelViewer implements Listener {
 
             // Clicked an item
             if (event.getSlot() < 45) {
-                player.getInventory().addItem(clicked.clone());
-                player.sendMessage(Component.text("Given model!", NamedTextColor.GREEN));
+                if (clicked.getType() == Material.CHEST) {
+                    // It's a folder
+                    Component displayName = clicked.getItemMeta().displayName();
+                    if (displayName instanceof TextComponent tc) {
+                        String folderName = tc.content();
+                        openCategory(player, holder.namespace, holder.path + folderName + "/", 0);
+                    }
+                } else {
+                    // It's a model
+                    player.getInventory().addItem(clicked.clone());
+                    player.sendMessage(Component.text("Given model!", NamedTextColor.GREEN));
+                }
             }
         } else if ("search_results".equals(type)) {
             if (event.getSlot() == 49) {
@@ -234,11 +289,15 @@ public class ModelViewer implements Listener {
     }
 
     private void openSearchResults(Player player, String query) {
-        List<Map.Entry<String, String>> matchingModels = new ArrayList<>();
+        List<ResourcePackInspector.ModelInfo> matchingModels = new ArrayList<>();
+
         for (String namespace : plugin.getPackInspector().getNamespaces()) {
-            for (String modelIdentifier : plugin.getPackInspector().getModels(namespace)) {
-                if (modelIdentifier.toLowerCase().contains(query.toLowerCase())) {
-                    matchingModels.add(new AbstractMap.SimpleEntry<>(namespace, modelIdentifier));
+            for (String modelPath : plugin.getPackInspector().getModels(namespace)) {
+                if (modelPath.toLowerCase().contains(query.toLowerCase())) {
+                    ResourcePackInspector.ModelInfo info = plugin.getPackInspector().getModelInfo(namespace, modelPath);
+                    if (info != null) {
+                        matchingModels.add(info);
+                    }
                 }
             }
         }
@@ -262,20 +321,21 @@ public class ModelViewer implements Listener {
         if (baseMaterial == null) baseMaterial = Material.LEATHER_HORSE_ARMOR;
         final Material finalBaseMaterial = baseMaterial;
 
-        animateItems(player, inv, matchingModels, (entry) -> {
-            String namespace = entry.getKey();
-            String modelIdentifier = entry.getValue();
-            // modelIdentifier is just the filename now
-            
+        animateItems(player, inv, matchingModels, (modelInfo) -> {
             ItemStack item = new ItemStack(finalBaseMaterial);
             ItemMeta meta = item.getItemMeta();
-            meta.displayName(Component.text(modelIdentifier, NamedTextColor.WHITE));
-            meta.lore(List.of(Component.text(namespace + ":" + modelIdentifier, NamedTextColor.GRAY)));
+            meta.displayName(Component.text(modelInfo.displayPath, NamedTextColor.WHITE));
+            meta.lore(List.of(Component.text(modelInfo.displayNamespace, NamedTextColor.GRAY)));
+
             try {
-                meta.setItemModel(new NamespacedKey(namespace, modelIdentifier));
+                if (plugin.isDebugEnabled()) {
+                    plugin.getLogger().info("[Debug] Applying model to SEARCH item: " + modelInfo.realNamespace + ":" + modelInfo.realPath);
+                }
+                meta.setItemModel(new NamespacedKey(modelInfo.realNamespace, modelInfo.realPath));
             } catch (Exception e) {
-                // Ignore
+                plugin.getLogger().warning("Invalid model key for " + modelInfo.realNamespace + ":" + modelInfo.realPath);
             }
+
             item.setItemMeta(meta);
             return item;
         });
