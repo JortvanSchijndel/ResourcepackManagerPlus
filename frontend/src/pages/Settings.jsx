@@ -962,7 +962,7 @@ const Settings = () => {
                     {fixingPaths ? 'Fixing...' : 'Fix Folder Structure'}
                   </Button>
                 )}
-                {auditIssues.some(i => i.issue.includes("texture")) && (
+                {auditIssues.some(i => i.issue.toLowerCase().includes("texture")) && (
                   <Button onPress={fixTextures} disabled={auditLoading || generatingThumbnails || regeneratingAllThumbnails || fixingPaths || fixingTextures || !selectedAuditBranch} color="primary">
                     <Paintbrush className="mr-2 h-4 w-4" />
                     {fixingTextures ? 'Fixing...' : 'Fix Texture Issues'}

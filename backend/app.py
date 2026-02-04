@@ -896,12 +896,7 @@ def audit_models(branch_name):
 
     return jsonify({"issues": issues})
 
-@app.route('/api/audit/fix-textures/<branch_name>', methods=['POST'])
-@login_required
-def fix_texture_issues(branch_name):
-    if current_user.role != 'admin':
-        return jsonify({"error": "Unauthorized"}), 403
-
+def _fix_textures_internal(branch_name):
     branch_path = _get_branch_path(branch_name)
     assets_path = branch_path / "assets"
     
@@ -909,7 +904,7 @@ def fix_texture_issues(branch_name):
     errors = []
 
     if not assets_path.exists():
-        return jsonify({"error": "Assets folder not found"}), 404
+        return 0, ["Assets folder not found"]
 
     for metadata_file in assets_path.glob("**/metadata.json"):
         try:
@@ -1027,7 +1022,19 @@ def fix_texture_issues(branch_name):
     if fixed_files_count > 0:
         trigger_backup()
 
-    return jsonify({"success": True, "fixed_files": fixed_files_count, "errors": errors})
+    return fixed_files_count, errors
+
+@app.route('/api/audit/fix-textures/<branch_name>', methods=['POST'])
+@login_required
+def fix_texture_issues(branch_name):
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    count, errors = _fix_textures_internal(branch_name)
+    if errors and errors[0] == "Assets folder not found":
+         return jsonify({"error": "Assets folder not found"}), 404
+
+    return jsonify({"success": True, "fixed_files": count, "errors": errors})
 
 @app.route('/api/audit/fix-paths/<branch_name>', methods=['POST'])
 @login_required
@@ -1389,6 +1396,9 @@ def upload_model(branch_name):
 
             with open(model_json_path, 'w') as f:
                 json.dump(model_data, f, indent=2)
+        
+        # Automatically fix textures after upload
+        _fix_textures_internal(branch_name)
 
         # Process thumbnail (save to metadata as base64)
         thumbnail_base64 = None
