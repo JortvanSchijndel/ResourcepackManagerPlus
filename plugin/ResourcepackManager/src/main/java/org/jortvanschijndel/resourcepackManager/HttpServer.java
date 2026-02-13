@@ -16,25 +16,32 @@ public class HttpServer {
         this.plugin = plugin;
     }
 
-    public void start() {
+    public synchronized void start() {
+        // If server is not null, it might be running. Stop it to ensure a clean start.
+        if (server != null) {
+            stop();
+        }
         try {
             int port = plugin.getConfig().getInt("port");
             server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(port), 0);
             server.createContext("/heartbeat", new HeartbeatHandler(plugin));
             server.createContext("/upload", new UploadHandler(plugin));
             server.createContext("/pack.zip", new DownloadHandler(plugin));
+            server.createContext("/watchdog", new WatchdogHandler()); // Add watchdog endpoint
             server.setExecutor(Executors.newSingleThreadExecutor());
             server.start();
             plugin.getLogger().info("HTTP server started on port " + port);
         } catch (IOException e) {
             plugin.getLogger().severe("Could not start HTTP server: " + e.getMessage());
+            server = null; // Ensure server is null on failure
         }
     }
 
-    public void stop() {
+    public synchronized void stop() {
         if (server != null) {
             server.stop(0);
             plugin.getLogger().info("HTTP server stopped.");
+            server = null;
         }
     }
 
@@ -60,6 +67,17 @@ public class HttpServer {
             exchange.sendResponseHeaders(200, response.length());
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(response.getBytes());
+            }
+        }
+    }
+
+    static class WatchdogHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            byte[] response = "OK".getBytes();
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
             }
         }
     }
