@@ -28,6 +28,7 @@ public class HttpServer {
             server.createContext("/upload", new UploadHandler(plugin));
             server.createContext("/pack.zip", new DownloadHandler(plugin));
             server.createContext("/watchdog", new WatchdogHandler()); // Add watchdog endpoint
+            server.createContext("/pack/", new PublicPackHandler(plugin)); // Add public pack endpoint
             server.setExecutor(Executors.newSingleThreadExecutor());
             server.start();
             plugin.getLogger().info("HTTP server started on port " + port);

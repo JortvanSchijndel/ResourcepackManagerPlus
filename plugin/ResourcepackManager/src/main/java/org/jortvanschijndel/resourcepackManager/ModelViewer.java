@@ -123,9 +123,6 @@ public class ModelViewer implements Listener {
 
                 if (modelInfo != null) {
                     try {
-                        if (plugin.isDebugEnabled()) {
-                            plugin.getLogger().info("[Debug] Applying model to item: " + modelInfo.realNamespace + ":" + modelInfo.realPath);
-                        }
                         meta.setItemModel(new NamespacedKey(modelInfo.realNamespace, modelInfo.realPath));
                     } catch (Exception e) {
                         plugin.getLogger().warning("Invalid model key for " + modelInfo.realNamespace + ":" + modelInfo.realPath);

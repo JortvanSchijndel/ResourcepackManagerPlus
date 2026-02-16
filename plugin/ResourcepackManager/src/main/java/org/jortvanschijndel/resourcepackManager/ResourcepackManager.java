@@ -4,11 +4,16 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.jortvanschijndel.resourcepackManager.util.ServerPropertiesUtil;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -21,25 +26,38 @@ public final class ResourcepackManager extends JavaPlugin {
     private ResourcePackInspector packInspector;
     private final Map<String, UUID> tokenMap = new ConcurrentHashMap<>();
     private BukkitRunnable watchdogTask;
+    private String publicPackId;
 
     @Override
-    public void onEnable() {
+    public void onLoad() {
         // Configuration
         saveDefaultConfig();
         config = getConfig();
-        reloadConfig();
         debugEnabled = config.getBoolean("debug", false);
+
+        // Load public pack ID
+        getPublicPackId();
+
+        // Load active pack early for the web server
+        loadActivePack();
 
         // Start web server
         httpServer = new HttpServer(this);
         httpServer.start();
+    }
 
+    @Override
+    public void onEnable() {
         // Start watchdog task
         startWatchdog();
 
-        // Load active pack
-        packInspector = new ResourcePackInspector(this);
-        loadActivePack();
+        // Re-inspect pack if needed or just ensure inspector is ready
+        if (packInspector == null) {
+            packInspector = new ResourcePackInspector(this);
+            if (activePack != null) {
+                packInspector.inspect(activePack);
+            }
+        }
 
         // Register listener
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
@@ -94,7 +112,16 @@ public final class ResourcepackManager extends JavaPlugin {
     public void setActivePack(File activePack) {
         this.activePack = activePack;
         if (activePack != null) {
+            // Generate a new ID for the new pack
+            this.publicPackId = UUID.randomUUID().toString();
+            getConfig().set("public-pack-id", this.publicPackId);
+            saveConfig();
+
+            if (packInspector == null) {
+                packInspector = new ResourcePackInspector(this);
+            }
             packInspector.inspect(activePack);
+            updateServerProperties(activePack);
         }
     }
 
@@ -109,6 +136,9 @@ public final class ResourcepackManager extends JavaPlugin {
     }
     
     public ResourcePackInspector getPackInspector() {
+        if (packInspector == null) {
+            packInspector = new ResourcePackInspector(this);
+        }
         return packInspector;
     }
 
@@ -120,7 +150,16 @@ public final class ResourcepackManager extends JavaPlugin {
                 Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed());
                 activePack = files[0];
                 getLogger().info("Loaded active resource pack: " + activePack.getName());
+                
+                // We can't inspect yet if called from onLoad because inspector might need plugin fully initialized?
+                // Actually inspector just reads file. But let's be safe.
+                // However, updateServerProperties needs to run.
+                
+                if (packInspector == null) {
+                    packInspector = new ResourcePackInspector(this);
+                }
                 packInspector.inspect(activePack);
+                updateServerProperties(activePack);
             }
         }
     }
@@ -179,5 +218,62 @@ public final class ResourcepackManager extends JavaPlugin {
             httpServer.start();
             getLogger().info("HTTP server restarted by watchdog.");
         });
+    }
+
+    public String getPublicPackId() {
+        if (publicPackId == null || publicPackId.isEmpty()) {
+            publicPackId = getConfig().getString("public-pack-id");
+            if (publicPackId == null || publicPackId.isEmpty()) {
+                publicPackId = UUID.randomUUID().toString();
+                getConfig().set("public-pack-id", publicPackId);
+                saveConfig();
+            }
+        }
+        return publicPackId;
+    }
+
+    private void updateServerProperties(File packFile) {
+        try {
+            File serverPropertiesFile = new File(getDataFolder().getParentFile().getParentFile(), "server.properties");
+            if (!serverPropertiesFile.exists()) {
+                getLogger().warning("Could not find server.properties at " + serverPropertiesFile.getAbsolutePath());
+                return;
+            }
+
+            Properties props = ServerPropertiesUtil.load(serverPropertiesFile);
+            
+            String sha1 = calculateSHA1(packFile);
+            String serverIp = getConfig().getString("server-ip");
+            int port = getConfig().getInt("port");
+            String url = "http://" + serverIp + ":" + port + "/pack/" + getPublicPackId();
+
+            props.setProperty("resource-pack", url);
+            props.setProperty("resource-pack-sha1", sha1);
+            props.setProperty("resource-pack-id", getPublicPackId());
+
+            ServerPropertiesUtil.save(serverPropertiesFile, props, StandardCharsets.UTF_8);
+            getLogger().info("Updated server.properties with new resource pack URL and SHA1.");
+
+        } catch (IOException | NoSuchAlgorithmException e) {
+            getLogger().severe("Failed to update server.properties: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private String calculateSHA1(File file) throws IOException, NoSuchAlgorithmException {
+        MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                sha1.update(buffer, 0, bytesRead);
+            }
+        }
+        byte[] hashBytes = sha1.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte b : hashBytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 }

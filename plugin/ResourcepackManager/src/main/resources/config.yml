@@ -13,6 +13,9 @@ allowed-url: ""
 # Whether to enable debug mode.
 debug: false
 
+# The current public pack ID. Do not change this manually.
+public-pack-id: ""
+
 # Model Viewer Settings
 model-viewer:
   # Whether to animate items appearing in the GUI

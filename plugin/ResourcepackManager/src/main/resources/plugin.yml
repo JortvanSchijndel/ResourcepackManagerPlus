@@ -2,6 +2,10 @@ name: ResourcepackManager
 version: '1.0-SNAPSHOT'
 main: org.jortvanschijndel.resourcepackManager.ResourcepackManager
 api-version: '1.21'
+
+depend:
+  - BKCommonLib
+
 commands:
   rmp:
     description: Main command for ResourcepackManager
@@ -15,6 +19,7 @@ commands:
     description: Open the model viewer GUI
     usage: /models [search]
     permission: resourcepackmanager.model-viewer
+
 permissions:
   resourcepackmanager.use:
     description: Allows using the main command.

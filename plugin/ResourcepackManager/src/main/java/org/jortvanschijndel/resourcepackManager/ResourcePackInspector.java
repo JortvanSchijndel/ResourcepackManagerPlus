@@ -56,18 +56,11 @@ public class ResourcePackInspector {
                     String realNamespace = parts[1];
                     String realPath = name.substring(name.indexOf("/models/item/") + "/models/item/".length(), name.length() - 5);
 
-                    if (plugin.isDebugEnabled()) {
-                        plugin.getLogger().info("[Debug] Found raw model: " + realNamespace + ":" + realPath);
-                    }
-
                     // Handle .../name/name.json convention by flattening the path
                     String[] pathParts = realPath.split("/");
                     if (pathParts.length > 1 && pathParts[pathParts.length - 1].equals(pathParts[pathParts.length - 2])) {
                         String originalPath = realPath;
                         realPath = String.join("/", Arrays.copyOf(pathParts, pathParts.length - 1));
-                        if (plugin.isDebugEnabled()) {
-                            plugin.getLogger().info("[Debug] Flattened path '" + originalPath + "' to '" + realPath + "'");
-                        }
                     }
 
                     String displayNamespace = realNamespace;
@@ -77,17 +70,10 @@ public class ResourcePackInspector {
                         String[] nsParts = realNamespace.split("-", 2);
                         displayNamespace = nsParts[0];
                         displayPath = nsParts[1] + "/" + realPath;
-                        if (plugin.isDebugEnabled()) {
-                            plugin.getLogger().info("[Debug] Split namespace '" + realNamespace + "' -> display namespace '" + displayNamespace + "' with path prefix '" + nsParts[1] + "'");
-                        }
                     }
 
                     ModelInfo modelInfo = new ModelInfo(realNamespace, realPath, displayNamespace, displayPath);
                     models.computeIfAbsent(displayNamespace, k -> new HashMap<>()).put(displayPath, modelInfo);
-
-                    if (plugin.isDebugEnabled()) {
-                        plugin.getLogger().info("[Debug] Mapped to display: " + displayNamespace + ":" + displayPath + " (Real: " + realNamespace + ":" + realPath + ")");
-                    }
                 }
             }
         } catch (IOException e) {
@@ -109,9 +95,6 @@ public class ResourcePackInspector {
     }
 
     public ModelInfo getModelInfo(String displayNamespace, String displayPath) {
-        if (plugin.isDebugEnabled()) {
-            plugin.getLogger().info("[Debug] getModelInfo for display: " + displayNamespace + ":" + displayPath);
-        }
 
         if (!models.containsKey(displayNamespace)) {
             if (plugin.isDebugEnabled()) plugin.getLogger().info("[Debug] Display namespace not found.");
@@ -122,30 +105,22 @@ public class ResourcePackInspector {
 
         ModelInfo exactMatch = namespaceModels.get(displayPath);
         if (exactMatch != null) {
-            if (plugin.isDebugEnabled()) plugin.getLogger().info("[Debug] Found exact match: " + exactMatch.realNamespace + ":" + exactMatch.realPath);
             return exactMatch;
         }
 
-        if (plugin.isDebugEnabled()) plugin.getLogger().info("[Debug] No exact match found. Searching by short name (suffix)...");
         for (Map.Entry<String, ModelInfo> entry : namespaceModels.entrySet()) {
             String path = entry.getKey();
             if (path.endsWith("/" + displayPath) || path.equals(displayPath)) {
-                ModelInfo foundInfo = entry.getValue();
-                if (plugin.isDebugEnabled()) plugin.getLogger().info("[Debug] Found short name match: " + foundInfo.realNamespace + ":" + foundInfo.realPath);
-                return foundInfo;
+                return entry.getValue();
             }
         }
 
-        if (plugin.isDebugEnabled()) plugin.getLogger().info("[Debug] No model info found.");
         return null;
     }
 
     public List<String> getModelsInPath(String namespace, String pathPrefix) {
         if (!models.containsKey(namespace)) return Collections.emptyList();
 
-        if (plugin.isDebugEnabled()) {
-            plugin.getLogger().info("[Debug] getModelsInPath for namespace='" + namespace + "', prefix='" + pathPrefix + "'");
-        }
 
         Set<String> files = new HashSet<>();
         Set<String> folders = new HashSet<>();
@@ -182,10 +157,6 @@ public class ResourcePackInspector {
         List<String> sortedFiles = new ArrayList<>(files);
         Collections.sort(sortedFiles);
         result.addAll(sortedFiles);
-
-        if (plugin.isDebugEnabled()) {
-            plugin.getLogger().info("[Debug] Result for getModelsInPath: " + result);
-        }
 
         return result;
     }
