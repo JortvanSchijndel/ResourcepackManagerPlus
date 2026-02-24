@@ -351,7 +351,7 @@ def update_current_user():
     data = request.json
     username = data.get('username')
     current_password = data.get('currentPassword')
-    new_password = data.get('newPassword')
+    new_password = data.get('new_password')
 
     if not username or not current_password:
         return jsonify({"error": "Username and current password required"}), 400
@@ -853,39 +853,95 @@ def audit_models(branch_name):
                                             "issue": "Missing particle texture"
                                         })
 
-                                    for tex_val in model_data['textures'].values():
+                                    for tex_key, tex_val in model_data['textures'].items():
                                         if isinstance(tex_val, str):
-                                            # Check if namespace is incorrect (not matching expected_ns)
+                                            # Parse the texture reference
+                                            ref_ns = current_namespace # Default to model's namespace if not specified
+                                            ref_path = tex_val
                                             if ":" in tex_val:
-                                                ns, path = tex_val.split(":", 1)
-                                                if ns != expected_ns:
-                                                    issues.append({
-                                                        "namespace": category if category else current_namespace,
-                                                        "model_identifier": model_identifier,
-                                                        "issue": f"Incorrect texture namespace ({ns})"
-                                                    })
-                                                    break
-                                                
-                                                # Check if texture path matches model identifier folder
-                                                path_parts = path.split("/")
-                                                if len(path_parts) > 1 and path_parts[0] == 'item' and path_parts[-2] != model_identifier:
-                                                     issues.append({
-                                                        "namespace": category if category else current_namespace,
-                                                        "model_identifier": model_identifier,
-                                                        "issue": f"Texture folder mismatch ({path_parts[-2]} != {model_identifier})"
-                                                    })
-                                                     break
+                                                ref_ns, ref_path = tex_val.split(":", 1)
+                                            
+                                            ref_path_parts = ref_path.split("/")
+                                            ref_filename = ref_path_parts[-1]
 
-                                            # Check if texture name lacks prefix
-                                            path_part = tex_val.split(":")[-1]
-                                            filename = path_part.split("/")[-1]
-                                            if not filename.startswith("ingeniamc_"):
+                                            # Determine the CORRECT path components for comparison
+                                            correct_ns = expected_ns # Always use the model's namespace for its textures
+
+                                            correct_path_parts = []
+                                            # Ensure 'item' prefix
+                                            if ref_path_parts[0] != 'item':
+                                                correct_path_parts.append('item')
+                                            else:
+                                                correct_path_parts.append(ref_path_parts[0])
+
+                                            # Ensure model_identifier folder
+                                            if len(ref_path_parts) > 1 and ref_path_parts[-2] != model_identifier:
+                                                # Add intermediate subfolders if they exist between 'item' and model_identifier
+                                                if ref_path_parts[0] == 'item' and len(ref_path_parts) > 2:
+                                                    correct_path_parts.extend(ref_path_parts[1:-2])
+                                                correct_path_parts.append(model_identifier)
+                                            elif len(ref_path_parts) > 1 and ref_path_parts[-2] == model_identifier:
+                                                correct_path_parts.extend(ref_path_parts[1:-1])
+                                            else:
+                                                correct_path_parts.append(model_identifier)
+
+                                            # Ensure ingeniamc_ prefix for filename
+                                            correct_filename = ref_filename
+                                            if not correct_filename.startswith("ingeniamc_"):
+                                                correct_filename = f"ingeniamc_{correct_filename}"
+                                            correct_path_parts.append(correct_filename)
+
+                                            correct_full_path_str = "/".join(correct_path_parts)
+                                            correct_texture_reference = f"{correct_ns}:{correct_full_path_str}"
+
+                                            # Construct absolute paths for physical files
+                                            current_texture_file_path = branch_path / "assets" / ref_ns / "textures" / f"{ref_path}.png"
+                                            prefixed_texture_file_path = branch_path / "assets" / correct_ns / "textures" / f"{correct_full_path_str}.png"
+
+                                            # --- Audit Checks ---
+                                            # 1. Namespace mismatch
+                                            if ref_ns != expected_ns:
                                                 issues.append({
                                                     "namespace": category if category else current_namespace,
                                                     "model_identifier": model_identifier,
-                                                    "issue": "Texture missing prefix (ingeniamc_)"
+                                                    "issue": f"Incorrect texture namespace ({ref_ns} instead of {expected_ns})"
                                                 })
-                                                break
+                                            
+                                            # 2. Texture path mismatch
+                                            if f"{ref_ns}:{ref_path}" != correct_texture_reference:
+                                                issues.append({
+                                                    "namespace": category if category else current_namespace,
+                                                    "model_identifier": model_identifier,
+                                                    "issue": f"Incorrect texture path ({ref_path} should be {correct_full_path_str})"
+                                                })
+
+                                            # 3. Texture prefix and existence
+                                            if not ref_filename.startswith("ingeniamc_"):
+                                                if prefixed_texture_file_path.exists() and not current_texture_file_path.exists():
+                                                    issues.append({
+                                                        "namespace": category if category else current_namespace,
+                                                        "model_identifier": model_identifier,
+                                                        "issue": f"Texture reference missing prefix (file has it): {tex_key}"
+                                                    })
+                                                elif not current_texture_file_path.exists() and not prefixed_texture_file_path.exists():
+                                                    issues.append({
+                                                        "namespace": category if category else current_namespace,
+                                                        "model_identifier": model_identifier,
+                                                        "issue": f"Missing texture file: {tex_val}"
+                                                    })
+                                                elif current_texture_file_path.exists():
+                                                    issues.append({
+                                                        "namespace": category if category else current_namespace,
+                                                        "model_identifier": model_identifier,
+                                                        "issue": f"Texture missing prefix (ingeniamc_): {tex_key}"
+                                                    })
+                                            else: # Filename already has ingeniamc_ prefix
+                                                if not current_texture_file_path.exists():
+                                                    issues.append({
+                                                        "namespace": category if category else current_namespace,
+                                                        "model_identifier": model_identifier,
+                                                        "issue": f"Missing texture file: {tex_val}"
+                                                    })
 
                         except Exception as e:
                             logging.error(f"Error auditing textures in {json_file}: {e}")
@@ -930,85 +986,106 @@ def _fix_textures_internal(branch_name):
             was_updated = False
 
             # Fix #missing
-            if '"#missing"' in json.dumps(model_data):
-                if 'textures' not in model_data:
-                    model_data['textures'] = {}
-                if 'missing' not in model_data['textures']:
-                    textures_dir = branch_path / "assets" / current_namespace / "textures" / "item" / model_identifier
-                    textures_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    missing_png_path = textures_dir / "ingeniamc_missing.png"
-                    if not missing_png_path.exists():
-                        with open(missing_png_path, 'wb') as f:
-                            f.write(TRANSPARENT_PNG_DATA)
-                    
-                    model_data['textures']['missing'] = f"{current_namespace}:item/{model_identifier}/ingeniamc_missing"
+            if 'textures' not in model_data:
+                model_data['textures'] = {}
+            if 'missing' not in model_data['textures'] and '"#missing"' in json.dumps(model_data):
+                textures_dir_for_missing = branch_path / "assets" / current_namespace / "textures" / "item" / model_identifier
+                textures_dir_for_missing.mkdir(parents=True, exist_ok=True)
+                
+                missing_png_path = textures_dir_for_missing / "ingeniamc_missing.png"
+                if not missing_png_path.exists():
+                    with open(missing_png_path, 'wb') as f:
+                        f.write(TRANSPARENT_PNG_DATA)
+                
+                model_data['textures']['missing'] = f"{current_namespace}:item/{model_identifier}/ingeniamc_missing"
+                was_updated = True
+
+            # Fix missing particle texture
+            if 'particle' not in model_data['textures']:
+                first_tex = next((v for k, v in model_data['textures'].items() if isinstance(v, str)), None)
+                if first_tex:
+                    model_data['textures']['particle'] = first_tex
                     was_updated = True
 
-            # Fix incorrect namespaces and add prefix
+            # Fix incorrect namespaces, add prefix, and ensure existence
             if 'textures' in model_data:
-                textures_dir = branch_path / "assets" / current_namespace / "textures" / "item" / model_identifier
-                
-                # Fix missing particle texture
-                if 'particle' not in model_data['textures']:
-                    # Find first available texture
-                    first_tex = next((v for k, v in model_data['textures'].items() if isinstance(v, str)), None)
-                    if first_tex:
-                        model_data['textures']['particle'] = first_tex
-                        was_updated = True
-
                 for key, value in model_data['textures'].items():
                     if isinstance(value, str):
                         original_value = value
-                        new_value = value
                         
-                        # Fix namespace
-                        if ":" in new_value:
-                            ns, path = new_value.split(":", 1)
-                            if ns != current_namespace:
-                                new_value = f"{current_namespace}:{path}"
+                        # Parse the texture reference
+                        ref_ns = current_namespace # Default to model's namespace if not specified
+                        ref_path = value
+                        if ":" in value:
+                            ref_ns, ref_path = value.split(":", 1)
                         
-                        # Fix prefix and directory name
-                        if ":" in new_value:
-                            ns, path = new_value.split(":", 1)
-                            path_parts = path.split("/")
-                            filename = path_parts[-1]
-                            
-                            # Ensure directory name matches model identifier if it's a local texture
-                            # e.g. item/snakeheadbottom/texture -> item/snakehead_bottom/texture
-                            if len(path_parts) > 1 and path_parts[-2] != model_identifier:
-                                # Only fix if it looks like a model-specific folder (inside item/)
-                                if path_parts[0] == 'item':
-                                     path_parts[-2] = model_identifier
+                        ref_path_parts = ref_path.split("/")
+                        ref_filename = ref_path_parts[-1]
+                        
+                        # Determine the CORRECT path components
+                        correct_ns = current_namespace # Always use the model's namespace for its textures
 
-                            if not filename.startswith("ingeniamc_"):
-                                new_filename = f"ingeniamc_{filename}"
-                                path_parts[-1] = new_filename
-                                
-                                new_path = "/".join(path_parts)
-                                new_value = f"{ns}:{new_path}"
-                                
-                                # Rename physical file if it exists in this model's texture folder
-                                # We assume the texture is local to this model if we are fixing it
-                                old_file_path = textures_dir / f"{filename}.png"
-                                new_file_path = textures_dir / f"{new_filename}.png"
-                                
-                                if old_file_path.exists():
-                                    if not new_file_path.exists():
-                                        old_file_path.rename(new_file_path)
-                                    else:
-                                        # New file already exists? Maybe we ran this partially?
-                                        pass
-                                elif not new_file_path.exists():
-                                    # File not found, maybe it's a shared texture or vanilla?
-                                    pass
-                            else:
-                                # Even if prefix is there, we might have updated the path parts (directory fix)
-                                new_path = "/".join(path_parts)
-                                new_value = f"{ns}:{new_path}"
+                        correct_path_parts = []
+                        # Ensure 'item' prefix
+                        if ref_path_parts[0] != 'item':
+                            correct_path_parts.append('item')
+                        else:
+                            correct_path_parts.append(ref_path_parts[0])
 
-                        if new_value != original_value:
-                            model_data['textures'][key] = new_value
+                        # Ensure model_identifier folder
+                        if len(ref_path_parts) > 1 and ref_path_parts[-2] != model_identifier:
+                            # Add intermediate subfolders if they exist between 'item' and model_identifier
+                            if ref_path_parts[0] == 'item' and len(ref_path_parts) > 2:
+                                correct_path_parts.extend(ref_path_parts[1:-2])
+                            correct_path_parts.append(model_identifier)
+                        elif len(ref_path_parts) > 1 and ref_path_parts[-2] == model_identifier:
+                            correct_path_parts.extend(ref_path_parts[1:-1])
+                        else:
+                            correct_path_parts.append(model_identifier)
+
+                        # Ensure ingeniamc_ prefix for filename
+                        correct_filename = ref_filename
+                        if not correct_filename.startswith("ingeniamc_"):
+                            correct_filename = f"ingeniamc_{correct_filename}"
+                        correct_path_parts.append(correct_filename)
+
+                        correct_full_path_str = "/".join(correct_path_parts)
+                        correct_texture_reference = f"{correct_ns}:{correct_full_path_str}"
+                        
+                        # Construct absolute paths for physical files
+                        current_file_abs_path = branch_path / "assets" / ref_ns / "textures" / f"{ref_path}.png"
+                        correct_file_abs_path = branch_path / "assets" / correct_ns / "textures" / f"{correct_full_path_str}.png"
+                        
+                        # If the reference is already correct, check if file needs moving
+                        if original_value == correct_texture_reference:
+                            if not correct_file_abs_path.exists() and current_file_abs_path.exists():
+                                correct_file_abs_path.parent.mkdir(parents=True, exist_ok=True)
+                                current_file_abs_path.rename(correct_file_abs_path)
+                                was_updated = True # File moved
+                            continue # Reference is correct, and file is either correct or moved.
+
+                        # If we reach here, the reference is NOT correct (original_value != correct_texture_reference)
+                        # We need to update the reference in model_data.
+                        # We also need to ensure the physical file is at the correct_file_abs_path.
+
+                        if correct_file_abs_path.exists():
+                            # File already exists at the correct location, just update reference
+                            model_data['textures'][key] = correct_texture_reference
+                            was_updated = True
+                        elif current_file_abs_path.exists():
+                            # File exists at the current (incorrect) location, move it to the correct location
+                            correct_file_abs_path.parent.mkdir(parents=True, exist_ok=True)
+                            current_file_abs_path.rename(correct_file_abs_path)
+                            model_data['textures'][key] = correct_texture_reference
+                            was_updated = True
+                        else:
+                            # Neither the current nor the correct physical file exists.
+                            # This means the texture is truly missing.
+                            # Create a transparent PNG at the correct location and update the reference.
+                            correct_file_abs_path.parent.mkdir(parents=True, exist_ok=True)
+                            with open(correct_file_abs_path, 'wb') as f:
+                                f.write(TRANSPARENT_PNG_DATA)
+                            model_data['textures'][key] = correct_texture_reference
                             was_updated = True
             
             if was_updated:
@@ -1251,33 +1328,33 @@ def fix_model_paths(branch_name):
 @login_required
 def update_thumbnail(branch_name, namespace, model_identifier):
     thumbnail_file = request.files.get('thumbnail')
-    
+
     if not thumbnail_file:
         return jsonify({"error": "Thumbnail file required"}), 400
-        
+
     branch_path = _get_branch_path(branch_name)
-    
+
     # Use resolver to find the model path
     models_dir, _, _ = resolve_model_path(branch_path, namespace, model_identifier)
-    
+
     metadata_path = models_dir / "metadata.json"
-    
+
     if not metadata_path.exists():
         return jsonify({"error": "Metadata not found"}), 404
-        
+
     try:
         thumbnail_data = thumbnail_file.read()
         thumbnail_base64 = f"data:image/png;base64,{base64.b64encode(thumbnail_data).decode('utf-8')}"
-        
+
         with open(metadata_path, 'r') as f:
             metadata = json.load(f)
-            
+
         metadata["thumbnail"] = thumbnail_base64
         metadata["updated"] = datetime.now().isoformat()
-        
+
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        
+
         trigger_backup()
         return jsonify({"success": True, "message": "Thumbnail updated"})
     except Exception as e:
@@ -1314,21 +1391,21 @@ def upload_model(branch_name):
     subpath = "" # Always empty for flattened structure
 
     branch_path = _get_branch_path(branch_name)
-    
+
     # Standard Minecraft paths
     # assets/<namespace>/models/item/<subpath>/<model_identifier>/
     # assets/<namespace>/textures/item/<subpath>/<model_identifier>/
-    
+
     base_assets = branch_path / "assets" / real_namespace
-    
+
     models_base = base_assets / "models" / "item"
     textures_base = base_assets / "textures" / "item"
-    
+
     # subpath is empty
-        
+
     models_dir = models_base / model_identifier
     textures_dir = textures_base / model_identifier
-    
+
     # We also create an "items" definition file, though its use is custom
     # assets/<namespace>/items/<subpath>/<model_identifier>.json ?
     # Or just assets/<namespace>/items/<model_identifier>.json?
@@ -1348,10 +1425,18 @@ def upload_model(branch_name):
             with open(bbmodel_path, 'r') as f:
                 bbmodel_data = json.load(f)
 
+            bbmodel_updated = False
             if "textures" in bbmodel_data:
                 for texture in bbmodel_data["textures"]:
                     if "source" in texture and texture["source"].startswith("data:image"):
                         tex_name = texture.get("name", "texture")
+
+                        if not tex_name.startswith("ingeniamc_"):
+                            new_tex_name = f"ingeniamc_{tex_name}"
+                            texture["name"] = new_tex_name
+                            tex_name = new_tex_name
+                            bbmodel_updated = True
+
                         if not tex_name.endswith('.png'):
                             tex_name += ".png"
                         tex_path = textures_dir / tex_name
@@ -1367,6 +1452,10 @@ def upload_model(branch_name):
                                 mcmeta_content = {"animation": {"frametime": final_frametime}}
                                 with open(mcmeta_path, 'w') as f:
                                     json.dump(mcmeta_content, f, indent=2)
+
+            if bbmodel_updated:
+                with open(bbmodel_path, 'w') as f:
+                    json.dump(bbmodel_data, f, indent=2)
 
         if json_file:
             model_json_path = models_dir / f"{model_base_name}.json"
@@ -1396,7 +1485,7 @@ def upload_model(branch_name):
 
             with open(model_json_path, 'w') as f:
                 json.dump(model_data, f, indent=2)
-        
+
         # Automatically fix textures after upload
         _fix_textures_internal(branch_name)
 
@@ -1417,13 +1506,13 @@ def upload_model(branch_name):
                 logging.error(f"Error checking for tints: {e}")
 
         item_def_path = items_dir / f"{model_identifier}.json"
-        
+
         # Model path for item definition: <namespace>:item/<subpath>/<model_identifier>/<model_base_name>
         model_path_ref = f"{real_namespace}:item"
         if subpath:
             model_path_ref += f"/{subpath}"
         model_path_ref += f"/{model_identifier}/{model_base_name}"
-        
+
         create_item_definition(item_def_path, model_path_ref, has_tints)
 
         existing_metadata = {}
@@ -1461,7 +1550,7 @@ def upload_model(branch_name):
 
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        
+
         trigger_backup()
         return jsonify({
             "success": True,
@@ -1490,15 +1579,15 @@ def update_model(branch_name, namespace, model_identifier):
     new_model_identifier = new_model_identifier.replace(" ", "_").lower()
 
     branch_path = _get_branch_path(branch_name)
-    
+
     # Resolve old paths
     old_models_dir, old_ns, old_sub = resolve_model_path(branch_path, namespace, model_identifier)
-    
+
     old_base = branch_path / "assets" / old_ns
     old_textures_dir = old_base / "textures" / "item"
     if old_sub: old_textures_dir = old_textures_dir / old_sub
     old_textures_dir = old_textures_dir / model_identifier
-    
+
     old_item_def = old_base / "items"
     if old_sub: old_item_def = old_item_def / old_sub
     old_item_def = old_item_def / f"{model_identifier}.json"
@@ -1506,16 +1595,16 @@ def update_model(branch_name, namespace, model_identifier):
     # Construct new paths (always flattened)
     new_ns, _ = parse_category_flattened(new_category_path)
     new_sub = ""
-    
+
     new_base = branch_path / "assets" / new_ns
     new_models_dir = new_base / "models" / "item"
     if new_sub: new_models_dir = new_models_dir / new_sub
     new_models_dir = new_models_dir / new_model_identifier
-    
+
     new_textures_dir = new_base / "textures" / "item"
     if new_sub: new_textures_dir = new_textures_dir / new_sub
     new_textures_dir = new_textures_dir / new_model_identifier
-    
+
     new_item_def = new_base / "items"
     if new_sub: new_item_def = new_item_def / new_sub
     new_item_def = new_item_def / f"{new_model_identifier}.json"
@@ -1559,7 +1648,7 @@ def update_model(branch_name, namespace, model_identifier):
                         break
             except OSError:
                 pass
-        
+
         cleanup(old_models_dir.parent, branch_path / "assets")
         cleanup(old_textures_dir.parent, branch_path / "assets")
         cleanup(old_item_def.parent, branch_path / "assets")
@@ -1571,7 +1660,7 @@ def update_model(branch_name, namespace, model_identifier):
             if f.name == "metadata.json": continue
             if f.stem == model_identifier:
                 f.rename(f.with_name(f.name.replace(model_identifier, new_model_identifier)))
-                
+
     # Call upload_model to process updates and regenerate metadata/item def
     return upload_model(branch_name)
 
@@ -1580,7 +1669,7 @@ def update_model(branch_name, namespace, model_identifier):
 @login_required
 def get_model(branch_name, namespace, model_identifier):
     branch_path = _get_branch_path(branch_name)
-    
+
     models_dir, _, _ = resolve_model_path(branch_path, namespace, model_identifier)
 
     if not models_dir.exists():
@@ -1636,7 +1725,7 @@ def approve_model(branch_name, namespace, model_identifier):
 
     branch_path = _get_branch_path(branch_name)
     models_dir, _, _ = resolve_model_path(branch_path, namespace, model_identifier)
-    
+
     metadata_path = models_dir / "metadata.json"
 
     if not metadata_path.exists():
@@ -1648,9 +1737,9 @@ def approve_model(branch_name, namespace, model_identifier):
 
         metadata["status"] = "approved"
 
-        with open(metadata_path, 'w') as f:
+        with open(metadata, 'w') as f:
             json.dump(metadata, f, indent=2)
-        
+
         trigger_backup()
         return jsonify({"success": True})
     except Exception as e:
@@ -1668,7 +1757,7 @@ def add_comment(branch_name, namespace, model_identifier):
 
     branch_path = _get_branch_path(branch_name)
     models_dir, _, _ = resolve_model_path(branch_path, namespace, model_identifier)
-    
+
     metadata_path = models_dir / "metadata.json"
 
     if not metadata_path.exists():
@@ -1688,7 +1777,7 @@ def add_comment(branch_name, namespace, model_identifier):
 
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        
+
         trigger_backup()
         return jsonify({"success": True, "comments": comments})
     except Exception as e:
@@ -1702,16 +1791,16 @@ def delete_model(branch_name, namespace, model_identifier):
         return jsonify({"error": "Unauthorized"}), 403
 
     branch_path = _get_branch_path(branch_name)
-    
+
     # Resolve paths
     models_dir, real_ns, subpath = resolve_model_path(branch_path, namespace, model_identifier)
-    
+
     base_assets = branch_path / "assets" / real_ns
-    
+
     textures_dir = base_assets / "textures" / "item"
     if subpath: textures_dir = textures_dir / subpath
     textures_dir = textures_dir / model_identifier
-    
+
     item_def = base_assets / "items"
     if subpath: item_def = item_def / subpath
     item_def = item_def / f"{model_identifier}.json"
@@ -1739,7 +1828,7 @@ def delete_model(branch_name, namespace, model_identifier):
     cleanup_empty_dirs(models_dir.parent, branch_path / "assets")
     cleanup_empty_dirs(textures_dir.parent, branch_path / "assets")
     cleanup_empty_dirs(item_def.parent, branch_path / "assets")
-    
+
     trigger_backup()
     return jsonify({"success": True, "message": "Model deleted"})
 
@@ -1749,7 +1838,7 @@ def delete_model(branch_name, namespace, model_identifier):
 def download_bbmodel(branch_name, namespace, model_identifier):
     branch_path = _get_branch_path(branch_name)
     models_dir, _, _ = resolve_model_path(branch_path, namespace, model_identifier)
-    
+
     model_base_name = Path(model_identifier).name
 
     bbmodel_files = list(models_dir.glob(f"{model_base_name}.bbmodel"))
@@ -1784,7 +1873,7 @@ def get_review_models(branch_path_to_review):
                             model_identifier = parts[-1]
                             subpath = "/".join(subpath_parts)
                             category = f"{namespace}/{subpath}" if subpath else namespace
-                            
+
                             review_models.append({
                                 'namespace': category,
                                 'identifier': model_identifier
@@ -1814,17 +1903,17 @@ def download_pack(branch_name):
     for m in review_models:
         cat = m['namespace']
         mid = m['identifier']
-        
+
         # We need to resolve the path to exclude it correctly
         # But here we are iterating files in zip.
         # We can just resolve the path and get relative path string
-        
+
         models_dir, real_ns, sub = resolve_model_path(branch_path, cat, mid)
-        
+
         # assets/<ns>/models/item/<sub>/<mid>
         base = f"assets/{real_ns}"
         sub_str = f"/{sub}" if sub else ""
-        
+
         excluded_paths.add(f"{base}/models/item{sub_str}/{mid}")
         excluded_paths.add(f"{base}/textures/item{sub_str}/{mid}")
         excluded_paths.add(f"{base}/items{sub_str}/{mid}.json")
@@ -2024,7 +2113,7 @@ def merge_branches():
             except Exception as e:
                 print(f"Error processing {path}: {e}")
                 error_count += 1
-        
+
         if success_count > 0:
             trigger_backup()
 
@@ -2073,13 +2162,13 @@ def list_categories():
                             subpath_parts = parts[3:-1]
                             subpath = "/".join(subpath_parts)
                             category = f"{namespace}/{subpath}" if subpath else namespace
-                            
+
                             # Check metadata for category override
                             with open(metadata_file, 'r') as f:
                                 meta = json.load(f)
                                 if 'category' in meta:
                                     category = meta['category']
-                                    
+
                             categories.add(category)
                     except Exception:
                         continue
@@ -2435,10 +2524,10 @@ def get_brand_icon():
 @login_required
 def get_texture(branch_name, namespace, model_identifier, texture_path):
     branch_path = _get_branch_path(branch_name)
-    
+
     # Resolve paths
     _, real_ns, subpath = resolve_model_path(branch_path, namespace, model_identifier)
-    
+
     textures_dir = branch_path / "assets" / real_ns / "textures" / "item"
     if subpath: textures_dir = textures_dir / subpath
     textures_dir = textures_dir / model_identifier
@@ -2465,7 +2554,7 @@ def get_thumbnail(branch_name, namespace, model_identifier):
     models_dir, _, _ = resolve_model_path(branch_path, namespace, model_identifier)
 
     metadata_path = models_dir / "metadata.json"
-    
+
     if metadata_path.exists():
         try:
             with open(metadata_path, 'r') as f:
@@ -2478,7 +2567,7 @@ def get_thumbnail(branch_name, namespace, model_identifier):
                         return send_file(io.BytesIO(data), mimetype='image/png')
         except Exception as e:
             logging.error(f"Error reading thumbnail from metadata: {e}")
-        
+
     return jsonify({"error": "Thumbnail not found"}), 404
 
 
@@ -2499,7 +2588,7 @@ def list_files_in_branch():
             file_path = Path(root) / filename
             rel_path = file_path.relative_to(branch_path)
             files.append(str(rel_path).replace('\\', '/'))
-        
+
         for dirname in dirs:
             dir_path = Path(root) / dirname
             rel_path = dir_path.relative_to(branch_path)
@@ -2597,7 +2686,7 @@ def create_file_or_folder():
         else:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.touch()
-        
+
         trigger_backup()
         return jsonify({"success": True, "message": f"{'Folder' if is_folder else 'File'} created"})
     except Exception as e:
@@ -2630,7 +2719,7 @@ def delete_file_or_folder():
             shutil.rmtree(target_path)
         else:
             target_path.unlink()
-        
+
         trigger_backup()
         return jsonify({"success": True, "message": "Deleted successfully"})
     except Exception as e:
@@ -2715,14 +2804,14 @@ def get_github_settings():
 def set_github_settings():
     if current_user.role != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
-    
+
     new_settings = request.json
     current_settings = load_github_settings()
 
     # Only update the token if a new one is provided and it's not the placeholder
     if 'token' in new_settings and new_settings['token'] and new_settings['token'] != 'PATISCURRENTLYSET':
         current_settings['token'] = new_settings['token']
-    
+
     current_settings['repoUrl'] = new_settings.get('repoUrl', '')
     current_settings['enabled'] = new_settings.get('enabled', False)
 
